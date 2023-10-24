@@ -7,7 +7,7 @@
     "deploy": "npx wagmi generate && npx dotenv -- npx vite-node script/deployAndTest/deploy.ts",
     "test": "npx dotenv -- npx vite-node script/deployAndTest/test.ts",
     "test:signing": "npx dotenv -- npx vite-node script/deployAndTest/testSigning.ts",
-    "verify": "npx wagmi generate && npx dotenv -- npx vite-node script/verify.ts",
+    "verify": "npx dotenv -- npx vite-node script/verify.ts",
     "build": "npx wagmi generate"
   },
   "keywords": [],
