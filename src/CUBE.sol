@@ -4,11 +4,10 @@ pragma solidity ^0.8.20;
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
-import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessagehashUtils.sol";
 
 contract TestCUBE is ERC721, Ownable, Multicall {
-    using ECDSA for bytes32;
-
     uint256 private _nextTokenId;
     uint256 private questCompletionIdCounter = 0; // Add this line
 
@@ -90,19 +89,48 @@ contract TestCUBE is ERC721, Ownable, Multicall {
         uint256 stepChainId;
     }
 
-    function verify(CubeInputData memory cubeInput, bytes memory signature) internal view {
+    function _recover(CubeInputData memory cubeInput, bytes memory signature)
+        public
+        view
+        returns (address)
+    {
         // Create the data hash
-        bytes32 dataHash = keccak256(
-            abi.encode(cubeInput.questId, cubeInput.userId, cubeInput.walletName, cubeInput.steps)
-        );
+        bytes32 hashedMessage = keccak256(_encodeCubeInput(cubeInput));
+        bytes32 hashedMessageWithEthPrefix = MessageHashUtils.toEthSignedMessageHash(hashedMessage);
 
         // Recover the signer's address
-        address signer = ECDSA.recover(dataHash, signature);
+        address signer = _recover_from_hash(hashedMessageWithEthPrefix, signature);
 
-        require(signer != owner(), "Invalid signature");
+        return signer;
     }
 
-    function _mintCube(CubeInputData memory cubeInput) internal {
+    function _recover_from_hash(bytes32 hashedMessage, bytes memory signature)
+        public
+        view
+        returns (address)
+    {
+        // Recover the signer's address
+        address signer = ECDSA.recover(hashedMessage, signature);
+
+        return signer;
+    }
+
+    function verify(CubeInputData memory cubeInput, bytes memory signature) public view {
+        // Recover the signer's address
+        address signer = _recover(cubeInput, signature);
+
+        require(signer == owner(), "Signature must be from the owner");
+    }
+
+    function _encodeCubeInput(CubeInputData memory cubeInput) public pure returns (bytes memory) {
+        // todo add steps and potentially other data
+        return abi.encodePacked(cubeInput.questId, cubeInput.userId, cubeInput.walletName);
+    }
+
+    function _mintCube(CubeInputData memory cubeInput, bytes memory signature) internal {
+        // Verify the signature
+        verify(cubeInput, signature);
+
         uint256 issueNo = questIssueNumbers[cubeInput.questId];
         _safeMint(msg.sender, _nextTokenId);
         questIssueNumbers[cubeInput.questId]++;
@@ -140,7 +168,7 @@ contract TestCUBE is ERC721, Ownable, Multicall {
         // Loop over each CubeInputData in cubeInputs
         for (uint256 i = 0; i < cubeInputs.length; i++) {
             // Call the internal function _mintCube with each individual CubeInputData
-            _mintCube(cubeInputs[i]);
+            _mintCube(cubeInputs[i], signatures[i]);
         }
     }
 }
