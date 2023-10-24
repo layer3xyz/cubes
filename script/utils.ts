@@ -1,6 +1,7 @@
-import { chain } from "./deployAndTest";
+import { chain } from "./deployAndTest/config";
 
 const getExplorerBaseUrl = (): string => {
+	return ""
   return chain.blockExplorers.etherscan.url;
 };
 
