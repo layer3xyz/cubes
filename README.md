@@ -1,8 +1,12 @@
+# Layer3 CUBEs
+
+```
    ________  ______  ______
   / ____/ / / / __ )/ ____/
  / /   / / / / __  / __/
 / /___/ /_/ / /_/ / /___
 \____/\____/_____/_____/
+```
 
 This repository includes the Layer3 CUBE contract.
 
