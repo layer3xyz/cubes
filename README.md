@@ -1,66 +1,13 @@
-## Foundry
+   ________  ______  ______
+  / ____/ / / / __ )/ ____/
+ / /   / / / / __  / __/
+/ /___/ /_/ / /_/ / /___
+\____/\____/_____/_____/
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+This repository includes the Layer3 CUBE contract.
 
-Foundry consists of:
+It is built with Foundry, and aim to use Foundry best practices.
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+Unlike HardHat, Foundry doesn't need any js scripts. However, since our main consumer is going to be our own TypeScript app, I thought it was appropriate (and convenient) to add a light package.json setup and write some of the scripts in TypeScript.
 
-## Documentation
-
-https://book.getfoundry.sh/
-
-## Usage
-
-### Build
-
-```shell
-$ forge build
-```
-
-### Test
-
-```shell
-$ forge test
-```
-
-### Format
-
-```shell
-$ forge fmt
-```
-
-### Gas Snapshots
-
-```shell
-$ forge snapshot
-```
-
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+This repository is very much in progress and the scripts that are here are made in order to make development easier. At some point in the future we're going to optimize the repo more for production use case.
