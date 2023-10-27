@@ -1,8 +1,18 @@
 import { chain } from "./deployAndTest/config";
 
 const getExplorerBaseUrl = (): string => {
-	return ""
-  return chain.blockExplorers.etherscan.url;
+  const betterTypedChain = chain as {
+    blockExplorers?: {
+      etherscan?: {
+        url: string;
+      };
+    };
+  };
+
+  if (betterTypedChain.blockExplorers?.etherscan) {
+    return betterTypedChain.blockExplorers.etherscan.url;
+  }
+  return "";
 };
 
 export const getTxExplorerUrl = (hash: string): string => {

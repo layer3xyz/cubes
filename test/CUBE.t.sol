@@ -16,11 +16,6 @@ contract CubeTest is Test {
     uint256 internal userPrivateKey;
     uint256 internal deployerPrivateKey;
 
-    struct Community {
-        uint16 communityId;
-        string communityName;
-    }
-
     function setUp() public {
         deployerPrivateKey = vm.envUint("PRIVATE_KEY");
         (address alice, uint256 alicePk) = makeAddrAndKey("alice testgirl");
@@ -34,8 +29,8 @@ contract CubeTest is Test {
 
         string memory title = "Sample Quest";
         TestCUBE.Community[] memory communities = new TestCUBE.Community[](1);
-        communities[0] = TestCUBE.Community(1, "Test Community");
-        uint8 difficulty = 1;
+        communities[0] = TestCUBE.Community("Test Community");
+        TestCUBE.Difficulty difficulty = TestCUBE.Difficulty.INTERMEDIATE;
         TestCUBE.QuestType questType = TestCUBE.QuestType.QUEST;
 
         cube.initializeQuest(questId, communities, title, difficulty, questType);
