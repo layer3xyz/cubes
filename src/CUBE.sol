@@ -3,13 +3,15 @@ pragma solidity ^0.8.20;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {Multicall} from "@openzeppelin/contracts/utils/Multicall.sol";
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessagehashUtils.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 
-contract TestCUBE is ERC721, Ownable, Multicall {
-    uint256 private _nextTokenId;
-    uint256 private questCompletionIdCounter = 0; // Add this line
+contract TestCUBE is ERC721, AccessControl {
+    uint256 private _nextCubeId;
+    uint256 private questCompletionIdCounter = 0;
+
+    bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
 
     mapping(uint256 => uint256) private questIssueNumbers;
 
@@ -24,33 +26,26 @@ contract TestCUBE is ERC721, Ownable, Multicall {
         ADVANCED
     }
 
-    struct Community {
-        uint16 communityId;
-        string communityName;
-    }
-
     event QuestMetadata(
-        uint256 indexed questId,
-        QuestType questType,
-        uint8 difficulty,
-        uint16[6] communityIds,
-        string title
+        uint256 indexed questId, QuestType questType, Difficulty difficulty, string title
     );
 
-    event CommunityMetadata(uint16 indexed communityId, string communityName);
+    event QuestCommunity(uint256 indexed questId, string communityName);
 
-    event QuestCompleted(
+    event CubeClaim(
         uint256 indexed questId,
-        uint256 indexed completionId,
+        uint256 indexed cubeId,
         uint256 issueNumber,
-        uint256 tokenId,
         uint256 userId,
+        uint256 completedAt,
         string walletName
     );
 
-    event QuestTransaction(
-        uint256 indexed completionId, bytes32 indexed stepTxHash, uint256 indexed stepChainId
-    );
+    event CubeTransaction(uint256 indexed cubeId, bytes32 indexed txHash, uint256 indexed chainId);
+
+    struct Community {
+        string communityName;
+    }
 
     struct CubeInputData {
         uint256 questId;
@@ -59,7 +54,10 @@ contract TestCUBE is ERC721, Ownable, Multicall {
         StepCompletionData[] steps;
     }
 
-    constructor() ERC721("TestCUBE", "TestCUBE") Ownable(msg.sender) {}
+    constructor() ERC721("TestCUBE", "TestCUBE") {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(SIGNER_ROLE, msg.sender);
+    }
 
     function _baseURI() internal pure override returns (string memory) {
         return "https://l3img.b-cdn.net/ipfs/Qma6KFk7N3nP6LBxowuawcLfqQvmmCsWT1w2EMCihwAh7U?";
@@ -69,17 +67,14 @@ contract TestCUBE is ERC721, Ownable, Multicall {
         uint256 questId,
         Community[] memory communities,
         string memory title,
-        uint8 difficulty,
+        Difficulty difficulty,
         QuestType questType
-    ) public {
-        uint16[6] memory communityIds;
-
+    ) public onlyRole(SIGNER_ROLE) {
         for (uint256 i = 0; i < communities.length; i++) {
-            communityIds[i] = communities[i].communityId;
-            emit CommunityMetadata(communities[i].communityId, communities[i].communityName);
+            emit QuestCommunity(questId, communities[i].communityName);
         }
 
-        emit QuestMetadata(questId, questType, difficulty, communityIds, title);
+        emit QuestMetadata(questId, questType, difficulty, title);
 
         questIssueNumbers[questId] = 0;
     }
@@ -91,7 +86,7 @@ contract TestCUBE is ERC721, Ownable, Multicall {
 
     function _recover(CubeInputData memory cubeInput, bytes memory signature)
         public
-        view
+        pure
         returns (address)
     {
         // Create the data hash
@@ -99,18 +94,7 @@ contract TestCUBE is ERC721, Ownable, Multicall {
         bytes32 hashedMessageWithEthPrefix = MessageHashUtils.toEthSignedMessageHash(hashedMessage);
 
         // Recover the signer's address
-        address signer = _recover_from_hash(hashedMessageWithEthPrefix, signature);
-
-        return signer;
-    }
-
-    function _recover_from_hash(bytes32 hashedMessage, bytes memory signature)
-        public
-        view
-        returns (address)
-    {
-        // Recover the signer's address
-        address signer = ECDSA.recover(hashedMessage, signature);
+        address signer = ECDSA.recover(hashedMessageWithEthPrefix, signature);
 
         return signer;
     }
@@ -119,7 +103,10 @@ contract TestCUBE is ERC721, Ownable, Multicall {
         // Recover the signer's address
         address signer = _recover(cubeInput, signature);
 
-        require(signer == owner(), "Signature must be from the owner");
+        require(
+            hasRole(SIGNER_ROLE, signer),
+            "Signature must be signed by an address with the SIGNER_ROLE"
+        );
     }
 
     function _encodeCubeInput(CubeInputData memory cubeInput) public pure returns (bytes memory) {
@@ -132,20 +119,20 @@ contract TestCUBE is ERC721, Ownable, Multicall {
         verify(cubeInput, signature);
 
         uint256 issueNo = questIssueNumbers[cubeInput.questId];
-        _safeMint(msg.sender, _nextTokenId);
+        _safeMint(msg.sender, _nextCubeId);
         questIssueNumbers[cubeInput.questId]++;
 
-        emit QuestCompleted(
+        emit CubeClaim(
             cubeInput.questId,
             questCompletionIdCounter,
             issueNo,
-            _nextTokenId,
+            _nextCubeId,
             cubeInput.userId,
             cubeInput.walletName
         );
 
         for (uint256 i = 0; i < cubeInput.steps.length; i++) {
-            emit QuestTransaction(
+            emit CubeTransaction(
                 questCompletionIdCounter,
                 cubeInput.steps[i].stepTxHash,
                 cubeInput.steps[i].stepChainId
@@ -153,7 +140,7 @@ contract TestCUBE is ERC721, Ownable, Multicall {
         }
 
         questCompletionIdCounter++;
-        _nextTokenId++;
+        _nextCubeId++;
     }
 
     function mintMultipleCubes(CubeInputData[] memory cubeInputs, bytes[] memory signatures)
@@ -170,5 +157,16 @@ contract TestCUBE is ERC721, Ownable, Multicall {
             // Call the internal function _mintCube with each individual CubeInputData
             _mintCube(cubeInputs[i], signatures[i]);
         }
+    }
+
+    // The following functions are overrides required by Solidity.
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721, AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 }
