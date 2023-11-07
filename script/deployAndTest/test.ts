@@ -1,5 +1,11 @@
 import { readFile } from "fs/promises";
-import { createPublicClient, getContract, http } from "viem";
+import {
+  createPublicClient,
+  getContract,
+  http,
+  keccak256,
+  toBytes,
+} from "viem";
 import { testCubeABI } from "../../out/wagmiGenerated";
 import { generateSignatureForCubeInput } from "../signature";
 import { getTxExplorerUrl } from "../utils";
@@ -29,24 +35,39 @@ const test = async () => {
 
   const questId = 123n;
 
+  const PROD_RELAYER = "0x1796A56B5446A4D7D32914aa645Ba1d3730aE81D";
+  const DEV_RELAYER = "0x0FAfE28eCC76de5FB3047a11074Ba1ee79677058";
+
+  await contract.simulate
+    .grantRole([keccak256(toBytes("SIGNER_ROLE")), PROD_RELAYER])
+    .then(async ({ request }) => {
+      const hash = await deployerWallet.writeContract(request);
+      await publicClient.waitForTransactionReceipt({ hash });
+      console.log("Role granted to prod relayer: ", getTxExplorerUrl(hash));
+    });
+
+  await contract.simulate
+    .grantRole([keccak256(toBytes("SIGNER_ROLE")), DEV_RELAYER])
+    .then(async ({ request }) => {
+      const hash = await deployerWallet.writeContract(request);
+      await publicClient.waitForTransactionReceipt({ hash });
+      console.log("Role granted to dev relayer: ", getTxExplorerUrl(hash));
+    });
+
   await contract.simulate
     .initializeQuest([
       questId,
       [
         {
-          communityId: 33,
           communityName: "Test community 3",
         },
         {
-          communityId: 34,
           communityName: "Test community 4",
         },
         {
-          communityId: 35,
           communityName: "Test community 5",
         },
         {
-          communityId: 36,
           communityName: "Test community 6",
         },
       ],
@@ -80,6 +101,8 @@ const test = async () => {
         stepChainId: 8453n,
       },
     ] as const,
+    tokenUri: "",
+    timestamp: 123n,
   };
 
   // Sign the CubeInputData object itself.

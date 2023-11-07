@@ -1,8 +1,8 @@
 import { createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { foundry } from "viem/chains";
+import { goerli } from "viem/chains";
 
-export const chain = foundry;
+export const chain = goerli;
 
 export const privateKey = process.env.PRIVATE_KEY as `0x${string}`;
 

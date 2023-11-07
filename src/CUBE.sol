@@ -8,12 +8,13 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
 contract TestCUBE is ERC721, AccessControl {
-    uint256 private _nextCubeId;
+    uint256 private _nextTokenId;
     uint256 private questCompletionIdCounter = 0;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
 
     mapping(uint256 => uint256) private questIssueNumbers;
+    mapping(uint256 => string) private tokenURIs;
 
     enum QuestType {
         QUEST,
@@ -34,14 +35,14 @@ contract TestCUBE is ERC721, AccessControl {
 
     event CubeClaim(
         uint256 indexed questId,
-        uint256 indexed cubeId,
+        uint256 indexed tokenId,
         uint256 issueNumber,
         uint256 userId,
         uint256 completedAt,
         string walletName
     );
 
-    event CubeTransaction(uint256 indexed cubeId, bytes32 indexed txHash, uint256 indexed chainId);
+    event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
 
     struct Community {
         string communityName;
@@ -52,6 +53,8 @@ contract TestCUBE is ERC721, AccessControl {
         uint256 userId;
         string walletName;
         StepCompletionData[] steps;
+        string tokenUri;
+        uint256 timestamp;
     }
 
     constructor() ERC721("TestCUBE", "TestCUBE") {
@@ -59,8 +62,12 @@ contract TestCUBE is ERC721, AccessControl {
         _grantRole(SIGNER_ROLE, msg.sender);
     }
 
-    function _baseURI() internal pure override returns (string memory) {
-        return "https://l3img.b-cdn.net/ipfs/Qma6KFk7N3nP6LBxowuawcLfqQvmmCsWT1w2EMCihwAh7U?";
+    function setTokenURI(uint256 _tokenId, string memory newuri) public onlyRole(SIGNER_ROLE) {
+        tokenURIs[_tokenId] = newuri;
+    }
+
+    function tokenURI(uint256 _tokenId) public view override returns (string memory _tokenURI) {
+        return tokenURIs[_tokenId];
     }
 
     function initializeQuest(
@@ -110,7 +117,6 @@ contract TestCUBE is ERC721, AccessControl {
     }
 
     function _encodeCubeInput(CubeInputData memory cubeInput) public pure returns (bytes memory) {
-        // todo add steps and potentially other data
         return abi.encodePacked(cubeInput.questId, cubeInput.userId, cubeInput.walletName);
     }
 
@@ -119,15 +125,15 @@ contract TestCUBE is ERC721, AccessControl {
         verify(cubeInput, signature);
 
         uint256 issueNo = questIssueNumbers[cubeInput.questId];
-        _safeMint(msg.sender, _nextCubeId);
+        _safeMint(msg.sender, _nextTokenId);
         questIssueNumbers[cubeInput.questId]++;
 
         emit CubeClaim(
             cubeInput.questId,
-            questCompletionIdCounter,
+            _nextTokenId,
             issueNo,
-            _nextCubeId,
             cubeInput.userId,
+            cubeInput.timestamp,
             cubeInput.walletName
         );
 
@@ -139,8 +145,10 @@ contract TestCUBE is ERC721, AccessControl {
             );
         }
 
+        tokenURIs[_nextTokenId] = cubeInput.tokenUri;
+
         questCompletionIdCounter++;
-        _nextCubeId++;
+        _nextTokenId++;
     }
 
     function mintMultipleCubes(CubeInputData[] memory cubeInputs, bytes[] memory signatures)
