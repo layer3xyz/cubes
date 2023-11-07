@@ -43,7 +43,7 @@ contract CubeTest is Test {
         TestCUBE.StepCompletionData[] memory steps = new TestCUBE.StepCompletionData[](1);
         bytes32 txHashExample = 0x00000000;
         steps[0] = TestCUBE.StepCompletionData(0x00000000, 1);
-        cubeInputs[0] = TestCUBE.CubeInputData(1, 1, "Test Wallet", steps);
+        cubeInputs[0] = TestCUBE.CubeInputData(1, 1, "Test Wallet", steps, "ipfs://asdfasdf", 1000);
 
         return cubeInputs[0];
     }
