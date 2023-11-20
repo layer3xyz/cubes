@@ -218,7 +218,7 @@ contract DemoCUBE is ERC721, AccessControl, EIP712 {
         return digest.recover(signature);
     }
 
-    function _encodeStep(StepCompletionData calldata step) public pure returns (bytes memory) {
+    function _encodeStep(StepCompletionData calldata step) internal pure returns (bytes memory) {
         return abi.encode(STEP_COMPLETION_HASH, step.stepTxHash, step.stepChainId);
     }
 
