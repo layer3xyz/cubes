@@ -4,10 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "deploy": "npx wagmi generate && npx dotenv -- npx vite-node script/deployAndTest/deploy.ts",
-    "test": "npx dotenv -- npx vite-node script/deployAndTest/test.ts",
-    "test:signing": "npx dotenv -- npx vite-node script/deployAndTest/testSigning.ts",
-    "verify": "npx dotenv -- npx vite-node script/verify.ts",
+    "deploy": "npx wagmi generate && npx dotenv -- npx vite-node ts_script/deployAndTest/deploy.ts",
+    "test": "npx dotenv -- npx vite-node ts_script/deployAndTest/test.ts",
+    "test:signing": "npx dotenv -- npx vite-node ts_script/deployAndTest/testSigning.ts",
+    "verify": "npx dotenv -- npx vite-node ts_script/verify.ts",
     "build": "npx wagmi generate"
   },
   "keywords": [],

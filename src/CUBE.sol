@@ -1,20 +1,38 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessagehashUtils.sol";
-import "@openzeppelin/contracts/access/AccessControl.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 
-contract TestCUBE is ERC721, AccessControl {
-    uint256 private _nextTokenId;
-    uint256 private questCompletionIdCounter = 0;
+contract DemoCUBE is ERC721, AccessControl, EIP712 {
+    using ECDSA for bytes32;
+
+    error TestCUBE__IsNotSigner();
+    error TestCUBE__FeeNotEnough();
+    error TestCUBE__SignatureAndCubesInputMismatch();
+    error TestCUBE__WithdrawFailed();
+    error TestCUBE__NonceAlreadyUsed();
+
+    uint256 internal _nextTokenId;
+    uint256 internal questCompletionIdCounter;
+
+    bool public isMintingActive;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
 
-    mapping(uint256 => uint256) private questIssueNumbers;
-    mapping(uint256 => string) private tokenURIs;
+    bytes32 internal constant STEP_COMPLETION_HASH =
+        keccak256("StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)");
+    bytes32 internal constant CUBE_DATA_HASH = keccak256(
+        "CubeData(uint256 questId,uint256 userId,uint256 timestamp,uint256 nonce,string walletName,string tokenUri,address toAddress,StepCompletionData[] steps)StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)"
+    );
+
+    mapping(uint256 => uint256) internal questIssueNumbers;
+    mapping(uint256 => string) internal tokenURIs;
+    mapping(address signerAddress => mapping(uint256 nonce => bool isConsumed)) internal nonces;
 
     enum QuestType {
         QUEST,
@@ -30,9 +48,7 @@ contract TestCUBE is ERC721, AccessControl {
     event QuestMetadata(
         uint256 indexed questId, QuestType questType, Difficulty difficulty, string title
     );
-
     event QuestCommunity(uint256 indexed questId, string communityName);
-
     event CubeClaim(
         uint256 indexed questId,
         uint256 indexed tokenId,
@@ -41,49 +57,17 @@ contract TestCUBE is ERC721, AccessControl {
         uint256 completedAt,
         string walletName
     );
-
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
 
-    struct Community {
-        string communityName;
-    }
-
-    struct CubeInputData {
+    struct CubeData {
         uint256 questId;
         uint256 userId;
-        string walletName;
-        StepCompletionData[] steps;
-        string tokenUri;
         uint256 timestamp;
-    }
-
-    constructor() ERC721("TestCUBE", "TestCUBE") {
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(SIGNER_ROLE, msg.sender);
-    }
-
-    function setTokenURI(uint256 _tokenId, string memory newuri) public onlyRole(SIGNER_ROLE) {
-        tokenURIs[_tokenId] = newuri;
-    }
-
-    function tokenURI(uint256 _tokenId) public view override returns (string memory _tokenURI) {
-        return tokenURIs[_tokenId];
-    }
-
-    function initializeQuest(
-        uint256 questId,
-        Community[] memory communities,
-        string memory title,
-        Difficulty difficulty,
-        QuestType questType
-    ) public onlyRole(SIGNER_ROLE) {
-        for (uint256 i = 0; i < communities.length; i++) {
-            emit QuestCommunity(questId, communities[i].communityName);
-        }
-
-        emit QuestMetadata(questId, questType, difficulty, title);
-
-        questIssueNumbers[questId] = 0;
+        uint256 nonce;
+        string walletName;
+        string tokenUri;
+        address toAddress;
+        StepCompletionData[] steps;
     }
 
     struct StepCompletionData {
@@ -91,83 +75,168 @@ contract TestCUBE is ERC721, AccessControl {
         uint256 stepChainId;
     }
 
-    function _recover(CubeInputData memory cubeInput, bytes memory signature)
-        public
-        pure
-        returns (address)
-    {
-        // Create the data hash
-        bytes32 hashedMessage = keccak256(_encodeCubeInput(cubeInput));
-        bytes32 hashedMessageWithEthPrefix = MessageHashUtils.toEthSignedMessageHash(hashedMessage);
-
-        // Recover the signer's address
-        address signer = ECDSA.recover(hashedMessageWithEthPrefix, signature);
-
-        return signer;
+    constructor(
+        string memory _name,
+        string memory _symbol,
+        string memory _signingDomain,
+        string memory _signatureVersion
+    ) EIP712(_signingDomain, _signatureVersion) ERC721(_name, _symbol) {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(SIGNER_ROLE, msg.sender);
     }
 
-    function verify(CubeInputData memory cubeInput, bytes memory signature) public view {
-        // Recover the signer's address
-        address signer = _recover(cubeInput, signature);
-
-        require(
-            hasRole(SIGNER_ROLE, signer),
-            "Signature must be signed by an address with the SIGNER_ROLE"
-        );
+    function setTokenURI(uint256 _tokenId, string memory newuri) external onlyRole(SIGNER_ROLE) {
+        tokenURIs[_tokenId] = newuri;
     }
 
-    function _encodeCubeInput(CubeInputData memory cubeInput) public pure returns (bytes memory) {
-        return abi.encodePacked(cubeInput.questId, cubeInput.userId, cubeInput.walletName);
+    function tokenURI(uint256 _tokenId) public view override returns (string memory _tokenURI) {
+        return tokenURIs[_tokenId];
     }
 
-    function _mintCube(CubeInputData memory cubeInput, bytes memory signature) internal {
-        // Verify the signature
-        verify(cubeInput, signature);
+    function setIsAllowListActive(bool _isMintingActive) external onlyRole(SIGNER_ROLE) {
+        isMintingActive = _isMintingActive;
+    }
+
+    function initializeQuest(
+        uint256 questId,
+        string[] memory communities,
+        string memory title,
+        Difficulty difficulty,
+        QuestType questType
+    ) external onlyRole(SIGNER_ROLE) {
+        for (uint256 i = 0; i < communities.length;) {
+            emit QuestCommunity(questId, communities[i]);
+            unchecked {
+                ++i;
+            }
+        }
+
+        emit QuestMetadata(questId, questType, difficulty, title);
+
+        delete questIssueNumbers[questId];
+    }
+
+    function _mintCube(CubeData calldata cubeInput, bytes calldata signature) internal {
+        // check that signer has SIGNER_ROLE
+        address signer = _getSigner(cubeInput, signature);
+        if (!hasRole(SIGNER_ROLE, signer)) {
+            revert TestCUBE__IsNotSigner();
+        }
+
+        bool isConsumedNonce = nonces[signer][cubeInput.nonce];
+        if (isConsumedNonce) {
+            revert TestCUBE__NonceAlreadyUsed();
+        }
+
+        // cache tokenId
+        uint256 tokenId = _nextTokenId;
 
         uint256 issueNo = questIssueNumbers[cubeInput.questId];
-        _safeMint(msg.sender, _nextTokenId);
-        questIssueNumbers[cubeInput.questId]++;
 
-        emit CubeClaim(
-            cubeInput.questId,
-            _nextTokenId,
-            issueNo,
-            cubeInput.userId,
-            cubeInput.timestamp,
-            cubeInput.walletName
-        );
-
-        for (uint256 i = 0; i < cubeInput.steps.length; i++) {
+        for (uint256 i = 0; i < cubeInput.steps.length;) {
             emit CubeTransaction(
                 questCompletionIdCounter,
                 cubeInput.steps[i].stepTxHash,
                 cubeInput.steps[i].stepChainId
             );
+            unchecked {
+                ++i;
+            }
         }
 
-        tokenURIs[_nextTokenId] = cubeInput.tokenUri;
+        tokenURIs[tokenId] = cubeInput.tokenUri;
+        nonces[signer][cubeInput.nonce] = true;
 
-        questCompletionIdCounter++;
-        _nextTokenId++;
+        unchecked {
+            ++questCompletionIdCounter;
+            ++questIssueNumbers[cubeInput.questId];
+            ++_nextTokenId;
+        }
+
+        _safeMint(msg.sender, tokenId);
+
+        emit CubeClaim(
+            cubeInput.questId,
+            tokenId,
+            issueNo,
+            cubeInput.userId,
+            cubeInput.timestamp,
+            cubeInput.walletName
+        );
     }
 
-    function mintMultipleCubes(CubeInputData[] memory cubeInputs, bytes[] memory signatures)
-        public
+    function mintMultipleCubes(CubeData[] calldata cubeInputs, bytes[] calldata signatures)
+        external
         payable
     {
+        if (cubeInputs.length != signatures.length) {
+            revert TestCUBE__SignatureAndCubesInputMismatch();
+        }
         uint256 totalFee = 777 * cubeInputs.length;
 
-        // Fee check has been moved here
-        require(msg.value >= totalFee, "Not enough fee sent!");
+        if (msg.value < totalFee) {
+            revert TestCUBE__FeeNotEnough();
+        }
 
-        // Loop over each CubeInputData in cubeInputs
-        for (uint256 i = 0; i < cubeInputs.length; i++) {
-            // Call the internal function _mintCube with each individual CubeInputData
+        for (uint256 i = 0; i < cubeInputs.length;) {
             _mintCube(cubeInputs[i], signatures[i]);
+
+            unchecked {
+                ++i;
+            }
         }
     }
 
-    // The following functions are overrides required by Solidity.
+    function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        (bool success,) = msg.sender.call{value: address(this).balance}("");
+        if (!success) {
+            revert TestCUBE__WithdrawFailed();
+        }
+    }
+
+    function _getSigner(CubeData calldata data, bytes calldata signature)
+        internal
+        view
+        returns (address)
+    {
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    CUBE_DATA_HASH,
+                    data.questId,
+                    data.userId,
+                    data.timestamp,
+                    data.nonce,
+                    keccak256(bytes(data.walletName)),
+                    keccak256(bytes(data.tokenUri)),
+                    data.toAddress,
+                    _encodeCompletedSteps(data.steps)
+                )
+            )
+        );
+
+        return digest.recover(signature);
+    }
+
+    function _encodeStep(StepCompletionData calldata step) public pure returns (bytes memory) {
+        return abi.encode(STEP_COMPLETION_HASH, step.stepTxHash, step.stepChainId);
+    }
+
+    function _encodeCompletedSteps(StepCompletionData[] calldata steps)
+        internal
+        pure
+        returns (bytes32)
+    {
+        bytes32[] memory encodedSteps = new bytes32[](steps.length);
+
+        // hash each step
+        for (uint256 i = 0; i < steps.length; i++) {
+            encodedSteps[i] = keccak256(_encodeStep(steps[i]));
+        }
+
+        // return hash of the concatenated steps
+        return keccak256(abi.encodePacked(encodedSteps));
+    }
 
     function supportsInterface(bytes4 interfaceId)
         public
@@ -177,4 +246,6 @@ contract TestCUBE is ERC721, AccessControl {
     {
         return super.supportsInterface(interfaceId);
     }
+
+    receive() external payable {}
 }
