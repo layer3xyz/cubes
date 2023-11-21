@@ -1,7 +1,9 @@
 {
-	"solidity.compileUsingRemoteVersion": "v0.8.20+commit.a1b79de6",
-	"[solidity]": {
-		"editor.defaultFormatter": "JuanBlanco.solidity"
-	},
-	"solidity.formatter": "forge",
+  "solidity.compileUsingRemoteVersion": "v0.8.20+commit.a1b79de6",
+  "[solidity]": {
+    "editor.defaultFormatter": "NomicFoundation.hardhat-solidity"
+  },
+  "solidity.formatter": "forge",
+  "slither.solcPath": "",
+  "slither.hiddenDetectors": []
 }
