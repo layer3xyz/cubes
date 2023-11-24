@@ -15,7 +15,7 @@ contract SigUtils {
     bytes32 internal constant STEP_COMPLETION_HASH =
         keccak256("StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 timestamp,uint256 nonce,string walletName,string tokenUri,address toAddress,StepCompletionData[] steps)StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)"
+        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,string walletProvider,string tokenURI,string embedOrigin,address toAddress,StepCompletionData[] steps)StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)"
     );
     bytes32 private constant TYPE_HASH = keccak256(
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
@@ -24,10 +24,11 @@ contract SigUtils {
     struct CubeData {
         uint256 questId;
         uint256 userId;
-        uint256 timestamp;
+        uint256 completedAt;
         uint256 nonce;
-        string walletName;
-        string tokenUri;
+        string walletProvider;
+        string tokenURI;
+        string embedOrigin;
         address toAddress;
         StepCompletionData[] steps;
     }
@@ -44,10 +45,11 @@ contract SigUtils {
                     CUBE_DATA_HASH,
                     data.questId,
                     data.userId,
-                    data.timestamp,
+                    data.completedAt,
                     data.nonce,
-                    keccak256(bytes(data.walletName)),
-                    keccak256(bytes(data.tokenUri)),
+                    keccak256(bytes(data.walletProvider)),
+                    keccak256(bytes(data.tokenURI)),
+                    keccak256(bytes(data.embedOrigin)),
                     data.toAddress,
                     _encodeCompletedSteps(data.steps)
                 )
@@ -118,14 +120,5 @@ contract SigUtils {
         }
 
         // implicitly return (r, s, v)
-    }
-
-    function fromRSV(bytes32 r, bytes32 s, uint8 v) external pure returns (bytes memory) {
-        return abi.encodePacked(r, s, v);
-        // assembly {
-        //     r := mload(add(signature, 0x20))
-        //     s := mload(add(signature, 0x40))
-        //     v := byte(0, mload(add(signature, 0x60)))
-        // }
     }
 }

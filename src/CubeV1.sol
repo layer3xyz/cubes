@@ -38,7 +38,7 @@ contract CubeV1 is
     bytes32 internal constant STEP_COMPLETION_HASH =
         keccak256("StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 timestamp,uint256 nonce,string walletName,string tokenUri,address toAddress,StepCompletionData[] steps)StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)"
+        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,string walletProvider,string tokenURI,string embedOrigin,address toAddress,StepCompletionData[] steps)StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)"
     );
 
     mapping(uint256 => uint256) internal questIssueNumbers;
@@ -66,17 +66,19 @@ contract CubeV1 is
         uint256 issueNumber,
         uint256 userId,
         uint256 completedAt,
-        string walletName
+        string walletName,
+        string embedOrigin
     );
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
 
     struct CubeData {
         uint256 questId;
         uint256 userId;
-        uint256 timestamp;
+        uint256 completedAt;
         uint256 nonce;
-        string walletName;
-        string tokenUri;
+        string walletProvider;
+        string tokenURI;
+        string embedOrigin;
         address toAddress;
         StepCompletionData[] steps;
     }
@@ -122,7 +124,7 @@ contract CubeV1 is
         return tokenURIs[_tokenId];
     }
 
-    function setIsAllowListActive(bool _isMintingActive) external onlyRole(SIGNER_ROLE) {
+    function setIsMintingActive(bool _isMintingActive) external onlyRole(SIGNER_ROLE) {
         isMintingActive = _isMintingActive;
     }
 
@@ -146,7 +148,6 @@ contract CubeV1 is
     }
 
     function _mintCube(CubeData calldata cubeInput, bytes calldata signature) internal {
-        // check that signer has SIGNER_ROLE
         address signer = _getSigner(cubeInput, signature);
         if (!hasRole(SIGNER_ROLE, signer)) {
             revert TestCUBE__IsNotSigner();
@@ -157,7 +158,6 @@ contract CubeV1 is
             revert TestCUBE__NonceAlreadyUsed();
         }
 
-        // cache tokenId
         uint256 tokenId = _nextTokenId;
 
         uint256 issueNo = questIssueNumbers[cubeInput.questId];
@@ -173,7 +173,7 @@ contract CubeV1 is
             }
         }
 
-        tokenURIs[tokenId] = cubeInput.tokenUri;
+        tokenURIs[tokenId] = cubeInput.tokenURI;
         nonces[signer][cubeInput.nonce] = true;
 
         unchecked {
@@ -189,8 +189,9 @@ contract CubeV1 is
             tokenId,
             issueNo,
             cubeInput.userId,
-            cubeInput.timestamp,
-            cubeInput.walletName
+            cubeInput.completedAt,
+            cubeInput.walletProvider,
+            cubeInput.embedOrigin
         );
     }
 
@@ -234,10 +235,11 @@ contract CubeV1 is
                     CUBE_DATA_HASH,
                     data.questId,
                     data.userId,
-                    data.timestamp,
+                    data.completedAt,
                     data.nonce,
-                    keccak256(bytes(data.walletName)),
-                    keccak256(bytes(data.tokenUri)),
+                    keccak256(bytes(data.walletProvider)),
+                    keccak256(bytes(data.tokenURI)),
+                    keccak256(bytes(data.embedOrigin)),
                     data.toAddress,
                     _encodeCompletedSteps(data.steps)
                 )

@@ -64,10 +64,11 @@ contract CubeTest is Test {
         CubeV1.CubeData memory cubeData = CubeV1.CubeData({
             questId: 224040309745014662610336485866037874947,
             userId: 7,
-            timestamp: 1700151763,
+            completedAt: 1700151763,
             nonce: 224040309745014662610336485866037874947,
-            walletName: "MetaMask",
-            tokenUri: "ipfs://QmeDofVWQPJfmHNyaF73FzBedPd2dhhCy4JudXguVfaEQL",
+            walletProvider: "MetaMask",
+            tokenURI: "ipfs://QmeDofVWQPJfmHNyaF73FzBedPd2dhhCy4JudXguVfaEQL",
+            embedOrigin: "woofi.org",
             toAddress: 0x925e4b930c2a3597c876277308b9efa5bfa1061C,
             steps: steps
         });

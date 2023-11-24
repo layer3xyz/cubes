@@ -16,24 +16,24 @@ contract DeployProxy is Script {
     string constant SIGNATURE_DOMAIN = "LAYER3";
     string constant SIGNING_VERSION = "1";
 
-    function run(address _admin) external returns (address) {
+    function run() external returns (address) {
         if (block.chainid == 31337) {
             deployerKey = DEFAULT_ANVIL_PRIVATE_KEY;
         } else {
             deployerKey = vm.envUint("PRIVATE_KEY");
         }
 
-        address proxy = deployProxy(_admin);
+        address proxy = deployProxy(vm.addr(deployerKey));
 
         return proxy;
     }
 
     function deployProxy(address _admin) public returns (address) {
-        vm.startPrank(_admin);
+        vm.startBroadcast(_admin);
         CubeV1 cube = new CubeV1();
         ERC1967Proxy proxy = new ERC1967Proxy(address(cube), "");
         CubeV1(payable(proxy)).initialize(NAME, SYMBOL, SIGNATURE_DOMAIN, SIGNING_VERSION);
-        vm.stopPrank();
+        vm.stopBroadcast();
         return address(proxy);
     }
 }
