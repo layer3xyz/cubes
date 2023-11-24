@@ -37,26 +37,27 @@ contract SigUtils {
         uint256 stepChainId;
     }
 
-    function getStructHash(CubeData calldata _data) external view returns (bytes32) {
+    function getStructHash(CubeData calldata data) internal view returns (bytes32) {
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
                     CUBE_DATA_HASH,
-                    _data.questId,
-                    _data.userId,
-                    _data.timestamp,
-                    _data.nonce,
-                    keccak256(bytes(_data.walletName)),
-                    keccak256(bytes(_data.tokenUri)),
-                    _data.toAddress,
-                    _encodeCompletedSteps(_data.steps)
+                    data.questId,
+                    data.userId,
+                    data.timestamp,
+                    data.nonce,
+                    keccak256(bytes(data.walletName)),
+                    keccak256(bytes(data.tokenUri)),
+                    data.toAddress,
+                    _encodeCompletedSteps(data.steps)
                 )
             )
         );
+
         return digest;
     }
 
-    function _encodeStep(StepCompletionData calldata step) public pure returns (bytes memory) {
+    function _encodeStep(StepCompletionData calldata step) internal pure returns (bytes memory) {
         return abi.encode(STEP_COMPLETION_HASH, step.stepTxHash, step.stepChainId);
     }
 
@@ -83,5 +84,48 @@ contract SigUtils {
     function _hashTypedDataV4(bytes32 structHash) internal view virtual returns (bytes32) {
         // toTypedDataHash takes care of the "\x19\x01"
         return MessageHashUtils.toTypedDataHash(_buildDomainSeparator(), structHash);
+    }
+
+    function recoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature)
+        public
+        pure
+        returns (address)
+    {
+        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
+
+        return ecrecover(_ethSignedMessageHash, v, r, s);
+    }
+
+    function splitSignature(bytes memory sig) public pure returns (bytes32 r, bytes32 s, uint8 v) {
+        require(sig.length == 65, "invalid signature length");
+
+        assembly {
+            /*
+            First 32 bytes stores the length of the signature
+
+            add(sig, 32) = pointer of sig + 32
+            effectively, skips first 32 bytes of signature
+
+            mload(p) loads next 32 bytes starting at the memory address p into memory
+            */
+
+            // first 32 bytes, after the length prefix
+            r := mload(add(sig, 32))
+            // second 32 bytes
+            s := mload(add(sig, 64))
+            // final byte (first byte of the next 32 bytes)
+            v := byte(0, mload(add(sig, 96)))
+        }
+
+        // implicitly return (r, s, v)
+    }
+
+    function fromRSV(bytes32 r, bytes32 s, uint8 v) external pure returns (bytes memory) {
+        return abi.encodePacked(r, s, v);
+        // assembly {
+        //     r := mload(add(signature, 0x20))
+        //     s := mload(add(signature, 0x40))
+        //     v := byte(0, mload(add(signature, 0x60)))
+        // }
     }
 }

@@ -1,17 +1,18 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
 import {DemoCUBE} from "../src/CUBE.sol";
+import {CubeV1} from "../src/CubeV1.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
-contract TestCubeContract is DemoCUBE {
+contract TestCubeContract is CubeV1 {
     using ECDSA for bytes32;
 
     event LogSigner(address signer);
 
     bytes32 internal constant TEST_HASH = keccak256("CubeData(uint256 questId)");
 
-    constructor() DemoCUBE("Test", "TST", "LAYER3", "1") {}
+    constructor() CubeV1() {}
 
     function mintCube(CubeData calldata cubeInput, bytes calldata signature) external {
         address signer = getSigner(cubeInput, signature);
