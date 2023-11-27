@@ -1,21 +1,28 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
 import {DeployCube} from "../script/DeployCube.s.sol";
+import {DeployProxy} from "../script/DeployProxy.s.sol";
 import {Test, console} from "forge-std/Test.sol";
 import {DemoCUBE} from "../src/CUBE.sol";
+import {CubeV1} from "../src/CubeV1.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessagehashUtils.sol";
 import {SigUtils} from "./utils/Signature.t.sol";
 import {TestCubeContract} from "./TestCubeContract.sol";
+import {EIP712Upgradeable} from
+    "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 
 contract CubeTest is Test {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
-    DeployCube public deployer;
-    DemoCUBE public demoCube;
+    DeployProxy public deployer;
+    CubeV1 public demoCube;
     TestCubeContract public testCubeContract;
+
+    string constant SIGNATURE_DOMAIN = "LAYER3";
+    string constant SIGNING_VERSION = "1";
 
     SigUtils internal sigUtils;
 
@@ -30,68 +37,49 @@ contract CubeTest is Test {
     address public constant ALICE = address(2);
     address public constant BOB = address(3);
 
+    address public proxyAddress;
+
     function setUp() public {
-        deployer = new DeployCube();
-        demoCube = deployer.run();
+        ownerPrivateKey = 0xA11CE;
+        ownerPubKey = vm.addr(ownerPrivateKey);
+
+        deployer = new DeployProxy();
+        proxyAddress = deployer.deployProxy(ownerPubKey);
+        demoCube = CubeV1(payable(proxyAddress));
 
         vm.startBroadcast();
         testCubeContract = new TestCubeContract();
         vm.stopBroadcast();
 
-        sigUtils = new SigUtils("LAYER3", "1");
-
-        ownerPrivateKey = 0xA11CE;
-        ownerPubKey = vm.addr(ownerPrivateKey);
-
-        realPrivateKey = vm.envUint("PRIVATE_KEY");
-        realAccount = vm.addr(realPrivateKey);
+        sigUtils = new SigUtils(SIGNATURE_DOMAIN, SIGNING_VERSION);
     }
 
-    function test_MockSignature() public {
-        TestCubeContract.StepCompletionData[] memory steps = new DemoCUBE.StepCompletionData[](1);
-        steps[0] = DemoCUBE.StepCompletionData({
-            stepChainId: 137,
-            stepTxHash: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
+    function testSignature() public {
+        CubeV1.StepCompletionData[] memory steps = new CubeV1.StepCompletionData[](1);
+        steps[0] = CubeV1.StepCompletionData({
+            stepTxHash: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002,
+            stepChainId: 137
         });
 
-        TestCubeContract.CubeData memory cubeData = DemoCUBE.CubeData({
+        CubeV1.CubeData memory cubeData = CubeV1.CubeData({
             questId: 224040309745014662610336485866037874947,
             userId: 7,
-            timestamp: 1700151763,
+            completedAt: 1700151763,
             nonce: 224040309745014662610336485866037874947,
-            walletName: "Metamask",
-            steps: steps,
-            tokenUri: "ipfs://QmeDofVWQPJfmHNyaF73FzBedPd2dhhCy4JudXguVfaEQL",
-            toAddress: 0x925e4b930c2a3597c876277308b9efa5bfa1061C
+            walletProvider: "MetaMask",
+            tokenURI: "ipfs://QmeDofVWQPJfmHNyaF73FzBedPd2dhhCy4JudXguVfaEQL",
+            embedOrigin: "woofi.org",
+            toAddress: 0x925e4b930c2a3597c876277308b9efa5bfa1061C,
+            steps: steps
         });
 
         bytes32 digest = testCubeContract.getStructHash(cubeData);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(realPrivateKey, digest);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        assertEq(signature.length, 65);
 
-        bytes memory signature = new bytes(65);
-        signature[0] = bytes1(v);
-        for (uint256 i = 0; i < 32; i++) {
-            signature[i + 1] = r[i];
-            signature[i + 33] = s[i];
-        }
-
-        console.logBytes32(bytes32(signature));
-        console.logBytes32(digest);
-    }
-
-    function toHexString(bytes memory data) internal pure returns (string memory) {
-        bytes memory buffer = new bytes(2 * data.length + 2);
-        buffer[0] = "0";
-        buffer[1] = "x";
-        for (uint256 i = 0; i < data.length; i++) {
-            buffer[2 + i * 2] = char(bytes1(uint8(data[i] >> 4)));
-            buffer[3 + i * 2] = char(bytes1(uint8(data[i] & 0x0f)));
-        }
-        return string(buffer);
-    }
-
-    function char(bytes1 b) internal pure returns (bytes1 c) {
-        if (uint8(b) < 10) return bytes1(uint8(b) + 0x30);
-        else return bytes1(uint8(b) + 0x57);
+        address signerAddr = sigUtils.recoverSigner(digest, signature);
+        console.log("signer address %s is the same as the supposed %s?", signerAddr, ownerPubKey);
+        assertEq(signerAddr, ownerPubKey);
     }
 }

@@ -19,3 +19,6 @@ endif
 
 deploy:
 	@forge script script/DeployCube.s.sol:DeployCube $(NETWORK_ARGS)
+
+deploy_proxy:
+	@forge script script/DeployProxy.s.sol:DeployProxy $(NETWORK_ARGS)
