@@ -55,10 +55,10 @@ contract CubeTest is Test {
     }
 
     function testSignature() public {
-        CubeV1.StepCompletionData[] memory steps = new CubeV1.StepCompletionData[](1);
-        steps[0] = CubeV1.StepCompletionData({
-            stepTxHash: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002,
-            stepChainId: 137
+        CubeV1.TransactionData[] memory transactions = new CubeV1.TransactionData[](1);
+        transactions[0] = CubeV1.TransactionData({
+            txHash: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002,
+            chainId: 137
         });
 
         CubeV1.CubeData memory cubeData = CubeV1.CubeData({
@@ -66,11 +66,12 @@ contract CubeTest is Test {
             userId: 7,
             completedAt: 1700151763,
             nonce: 224040309745014662610336485866037874947,
+            price: 7777777777777777,
             walletProvider: "MetaMask",
             tokenURI: "ipfs://QmeDofVWQPJfmHNyaF73FzBedPd2dhhCy4JudXguVfaEQL",
             embedOrigin: "woofi.org",
             toAddress: 0x925e4b930c2a3597c876277308b9efa5bfa1061C,
-            steps: steps
+            transactions: transactions
         });
 
         bytes32 digest = testCubeContract.getStructHash(cubeData);

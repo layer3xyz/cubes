@@ -35,10 +35,10 @@ contract CubeV1 is
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
 
-    bytes32 internal constant STEP_COMPLETION_HASH =
-        keccak256("StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)");
+    bytes32 internal constant TX_DATA_HASH =
+        keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,string walletProvider,string tokenURI,string embedOrigin,address toAddress,StepCompletionData[] steps)StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)"
+        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,address toAddress,TransactionData[] transactions)TransactionData(bytes32 txHash,uint256 chainId)"
     );
 
     mapping(uint256 => uint256) internal questIssueNumbers;
@@ -76,16 +76,17 @@ contract CubeV1 is
         uint256 userId;
         uint256 completedAt;
         uint256 nonce;
+        uint256 price;
         string walletProvider;
         string tokenURI;
         string embedOrigin;
         address toAddress;
-        StepCompletionData[] steps;
+        TransactionData[] transactions;
     }
 
-    struct StepCompletionData {
-        bytes32 stepTxHash;
-        uint256 stepChainId;
+    struct TransactionData {
+        bytes32 txHash;
+        uint256 chainId;
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -162,11 +163,11 @@ contract CubeV1 is
 
         uint256 issueNo = questIssueNumbers[cubeInput.questId];
 
-        for (uint256 i = 0; i < cubeInput.steps.length;) {
+        for (uint256 i = 0; i < cubeInput.transactions.length;) {
             emit CubeTransaction(
                 questCompletionIdCounter,
-                cubeInput.steps[i].stepTxHash,
-                cubeInput.steps[i].stepChainId
+                cubeInput.transactions[i].txHash,
+                cubeInput.transactions[i].chainId
             );
             unchecked {
                 ++i;
@@ -195,22 +196,28 @@ contract CubeV1 is
         );
     }
 
-    function mintMultipleCubes(CubeData[] calldata cubeInputs, bytes[] calldata signatures)
+    function mintMultipleCubes(CubeData[] calldata cubeData, bytes[] calldata signatures)
         external
         payable
     {
-        if (cubeInputs.length != signatures.length) {
+        if (cubeData.length != signatures.length) {
             revert TestCUBE__SignatureAndCubesInputMismatch();
         }
-        uint256 totalFee = 777 * cubeInputs.length;
+
+        uint256 totalFee;
+        for (uint256 i = 0; i < cubeData.length;) {
+            totalFee = totalFee + cubeData[i].price;
+            unchecked {
+                ++i;
+            }
+        }
 
         if (msg.value < totalFee) {
             revert TestCUBE__FeeNotEnough();
         }
 
-        for (uint256 i = 0; i < cubeInputs.length;) {
-            _mintCube(cubeInputs[i], signatures[i]);
-
+        for (uint256 i = 0; i < cubeData.length;) {
+            _mintCube(cubeData[i], signatures[i]);
             unchecked {
                 ++i;
             }
@@ -237,11 +244,12 @@ contract CubeV1 is
                     data.userId,
                     data.completedAt,
                     data.nonce,
+                    data.price,
                     keccak256(bytes(data.walletProvider)),
                     keccak256(bytes(data.tokenURI)),
                     keccak256(bytes(data.embedOrigin)),
                     data.toAddress,
-                    _encodeCompletedSteps(data.steps)
+                    _encodeCompletedTxs(data.transactions)
                 )
             )
         );
@@ -249,24 +257,24 @@ contract CubeV1 is
         return digest.recover(signature);
     }
 
-    function _encodeStep(StepCompletionData calldata step) internal pure returns (bytes memory) {
-        return abi.encode(STEP_COMPLETION_HASH, step.stepTxHash, step.stepChainId);
+    function _encodeTx(TransactionData calldata transaction) internal pure returns (bytes memory) {
+        return abi.encode(TX_DATA_HASH, transaction.txHash, transaction.chainId);
     }
 
-    function _encodeCompletedSteps(StepCompletionData[] calldata steps)
+    function _encodeCompletedTxs(TransactionData[] calldata txData)
         internal
         pure
         returns (bytes32)
     {
-        bytes32[] memory encodedSteps = new bytes32[](steps.length);
+        bytes32[] memory encodedTxs = new bytes32[](txData.length);
 
-        // hash each step
-        for (uint256 i = 0; i < steps.length; i++) {
-            encodedSteps[i] = keccak256(_encodeStep(steps[i]));
+        // hash each tx
+        for (uint256 i = 0; i < txData.length; i++) {
+            encodedTxs[i] = keccak256(_encodeTx(txData[i]));
         }
 
-        // return hash of the concatenated steps
-        return keccak256(abi.encodePacked(encodedSteps));
+        // return hash of the concatenated txs
+        return keccak256(abi.encodePacked(encodedTxs));
     }
 
     function supportsInterface(bytes4 interfaceId)
