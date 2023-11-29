@@ -2,6 +2,7 @@
 pragma solidity 0.8.20;
 
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+import {CubeV1} from "../../src/CubeV1.sol";
 
 contract SigUtils {
     bytes32 internal immutable i_domain;
@@ -12,33 +13,18 @@ contract SigUtils {
         i_version = keccak256(bytes(_version));
     }
 
-    bytes32 internal constant STEP_COMPLETION_HASH =
-        keccak256("StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)");
+    bytes32 internal constant TX_DATA_HASH =
+        keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,string walletProvider,string tokenURI,string embedOrigin,address toAddress,StepCompletionData[] steps)StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)"
+        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,string[] tags,address toAddress,TransactionData[] transactions)TransactionData(bytes32 txHash,uint256 chainId)"
     );
     bytes32 private constant TYPE_HASH = keccak256(
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
     );
 
-    struct CubeData {
-        uint256 questId;
-        uint256 userId;
-        uint256 completedAt;
-        uint256 nonce;
-        string walletProvider;
-        string tokenURI;
-        string embedOrigin;
-        address toAddress;
-        StepCompletionData[] steps;
-    }
-
-    struct StepCompletionData {
-        bytes32 stepTxHash;
-        uint256 stepChainId;
-    }
-
-    function getStructHash(CubeData calldata data) internal view returns (bytes32) {
+    function getStructHash(CubeV1.CubeData calldata data) external view returns (bytes32) {
+        bytes32 encodedTxs = _encodeCompletedTxs(data.transactions);
+        bytes32 encodedTags = _encodeTags(data.tags);
         bytes32 digest = _hashTypedDataV4(
             keccak256(
                 abi.encode(
@@ -47,11 +33,13 @@ contract SigUtils {
                     data.userId,
                     data.completedAt,
                     data.nonce,
+                    data.price,
                     keccak256(bytes(data.walletProvider)),
                     keccak256(bytes(data.tokenURI)),
                     keccak256(bytes(data.embedOrigin)),
+                    encodedTags,
                     data.toAddress,
-                    _encodeCompletedSteps(data.steps)
+                    encodedTxs
                 )
             )
         );
@@ -59,24 +47,43 @@ contract SigUtils {
         return digest;
     }
 
-    function _encodeStep(StepCompletionData calldata step) internal pure returns (bytes memory) {
-        return abi.encode(STEP_COMPLETION_HASH, step.stepTxHash, step.stepChainId);
+    function _encodeTx(CubeV1.TransactionData calldata transaction)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encode(TX_DATA_HASH, transaction.txHash, transaction.chainId);
     }
 
-    function _encodeCompletedSteps(StepCompletionData[] calldata steps)
+    function _encodeCompletedTxs(CubeV1.TransactionData[] calldata txData)
         internal
         pure
         returns (bytes32)
     {
-        bytes32[] memory encodedSteps = new bytes32[](steps.length);
-
-        // hash each step
-        for (uint256 i = 0; i < steps.length; i++) {
-            encodedSteps[i] = keccak256(_encodeStep(steps[i]));
+        bytes32[] memory encodedTxs = new bytes32[](txData.length);
+        // hash each tx
+        for (uint256 i = 0; i < txData.length;) {
+            encodedTxs[i] = keccak256(_encodeTx(txData[i]));
+            unchecked {
+                ++i;
+            }
         }
 
-        // return hash of the concatenated steps
-        return keccak256(abi.encodePacked(encodedSteps));
+        // return hash of the concatenated txs
+        return keccak256(abi.encodePacked(encodedTxs));
+    }
+
+    function _encodeTags(string[] calldata tags) internal pure returns (bytes32) {
+        bytes32[] memory encodedTxs = new bytes32[](tags.length);
+        for (uint256 i = 0; i < tags.length;) {
+            encodedTxs[i] = keccak256(abi.encodePacked(tags[i]));
+            unchecked {
+                ++i;
+            }
+        }
+
+        // return hash of the concatenated txs
+        return keccak256(abi.encodePacked(encodedTxs));
     }
 
     function _buildDomainSeparator() private view returns (bytes32) {

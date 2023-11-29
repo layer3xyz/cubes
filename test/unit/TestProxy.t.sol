@@ -2,13 +2,13 @@
 
 pragma solidity 0.8.20;
 
-import {DeployProxy} from "../script/DeployProxy.s.sol";
-import {UpgradeCube} from "../script/UpgradeCube.s.sol";
+import {DeployProxy} from "../../script/DeployProxy.s.sol";
+import {UpgradeCube} from "../../script/UpgradeCube.s.sol";
 import {Test, console} from "forge-std/Test.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {CubeV1} from "../src/CubeV1.sol";
-import {CubeV2} from "../src/CubeV2.sol";
+import {CubeV1} from "../../src/CubeV1.sol";
+import {CubeV2} from "../../src/CubeV2.sol";
 
 contract DeployAndUpgradeTest is StdCheats, Test {
     DeployProxy public deployProxy;

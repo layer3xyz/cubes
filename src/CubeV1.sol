@@ -22,6 +22,7 @@ contract CubeV1 is
     using ECDSA for bytes32;
 
     error TestCUBE__IsNotSigner();
+    error TestCUBE__MintingIsNotActive();
     error TestCUBE__FeeNotEnough();
     error TestCUBE__SignatureAndCubesInputMismatch();
     error TestCUBE__WithdrawFailed();
@@ -38,7 +39,7 @@ contract CubeV1 is
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,address toAddress,TransactionData[] transactions)TransactionData(bytes32 txHash,uint256 chainId)"
+        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,string[] tags,address toAddress,TransactionData[] transactions)TransactionData(bytes32 txHash,uint256 chainId)"
     );
 
     mapping(uint256 => uint256) internal questIssueNumbers;
@@ -59,7 +60,7 @@ contract CubeV1 is
     event QuestMetadata(
         uint256 indexed questId, QuestType questType, Difficulty difficulty, string title
     );
-    event QuestCommunity(uint256 indexed questId, string communityName);
+    event QuestCommunity(uint256 indexed questId, string community);
     event CubeClaim(
         uint256 indexed questId,
         uint256 indexed tokenId,
@@ -67,7 +68,8 @@ contract CubeV1 is
         uint256 userId,
         uint256 completedAt,
         string walletName,
-        string embedOrigin
+        string embedOrigin,
+        string[] tags
     );
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
 
@@ -80,6 +82,7 @@ contract CubeV1 is
         string walletProvider;
         string tokenURI;
         string embedOrigin;
+        string[] tags;
         address toAddress;
         TransactionData[] transactions;
     }
@@ -104,6 +107,7 @@ contract CubeV1 is
         __EIP712_init(_signingDomain, _signatureVersion);
         __AccessControl_init();
         __UUPSUpgradeable_init();
+        isMintingActive = true;
 
         // TODO: update these so they're not msg.sender?
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -148,51 +152,53 @@ contract CubeV1 is
         delete questIssueNumbers[questId];
     }
 
-    function _mintCube(CubeData calldata cubeInput, bytes calldata signature) internal {
-        address signer = _getSigner(cubeInput, signature);
-        if (!hasRole(SIGNER_ROLE, signer)) {
-            revert TestCUBE__IsNotSigner();
-        }
-
-        bool isConsumedNonce = nonces[signer][cubeInput.nonce];
-        if (isConsumedNonce) {
-            revert TestCUBE__NonceAlreadyUsed();
-        }
-
+    function _mintCube(CubeData calldata _data, bytes calldata signature) internal {
         uint256 tokenId = _nextTokenId;
+        uint256 issueNo = questIssueNumbers[_data.questId];
 
-        uint256 issueNo = questIssueNumbers[cubeInput.questId];
-
-        for (uint256 i = 0; i < cubeInput.transactions.length;) {
-            emit CubeTransaction(
-                questCompletionIdCounter,
-                cubeInput.transactions[i].txHash,
-                cubeInput.transactions[i].chainId
-            );
-            unchecked {
-                ++i;
+        // scope for signer, avoids stack too deep errors
+        {
+            address signer = _getSigner(_data, signature);
+            if (!hasRole(SIGNER_ROLE, signer)) {
+                revert TestCUBE__IsNotSigner();
             }
-        }
 
-        tokenURIs[tokenId] = cubeInput.tokenURI;
-        nonces[signer][cubeInput.nonce] = true;
+            bool isConsumedNonce = nonces[signer][_data.nonce];
+            if (isConsumedNonce) {
+                revert TestCUBE__NonceAlreadyUsed();
+            }
+
+            for (uint256 i = 0; i < _data.transactions.length;) {
+                emit CubeTransaction(
+                    questCompletionIdCounter,
+                    _data.transactions[i].txHash,
+                    _data.transactions[i].chainId
+                );
+                unchecked {
+                    ++i;
+                }
+            }
+
+            tokenURIs[tokenId] = _data.tokenURI;
+            nonces[signer][_data.nonce] = true;
+        }
 
         unchecked {
             ++questCompletionIdCounter;
-            ++questIssueNumbers[cubeInput.questId];
+            ++questIssueNumbers[_data.questId];
             ++_nextTokenId;
         }
-
-        _safeMint(msg.sender, tokenId);
+        _safeMint(_data.toAddress, tokenId);
 
         emit CubeClaim(
-            cubeInput.questId,
+            _data.questId,
             tokenId,
             issueNo,
-            cubeInput.userId,
-            cubeInput.completedAt,
-            cubeInput.walletProvider,
-            cubeInput.embedOrigin
+            _data.userId,
+            _data.completedAt,
+            _data.walletProvider,
+            _data.embedOrigin,
+            _data.tags
         );
     }
 
@@ -200,6 +206,9 @@ contract CubeV1 is
         external
         payable
     {
+        if (!isMintingActive) {
+            revert TestCUBE__MintingIsNotActive();
+        }
         if (cubeData.length != signatures.length) {
             revert TestCUBE__SignatureAndCubesInputMismatch();
         }
@@ -236,7 +245,15 @@ contract CubeV1 is
         view
         returns (address)
     {
-        bytes32 digest = _hashTypedDataV4(
+        bytes32 digest = _computeDigest(data);
+        return digest.recover(signature);
+    }
+
+    function _computeDigest(CubeData calldata data) internal view returns (bytes32) {
+        bytes32 encodedTxs = _encodeCompletedTxs(data.transactions);
+        bytes32 encodedTags = _encodeTags(data.tags);
+
+        return _hashTypedDataV4(
             keccak256(
                 abi.encode(
                     CUBE_DATA_HASH,
@@ -248,13 +265,12 @@ contract CubeV1 is
                     keccak256(bytes(data.walletProvider)),
                     keccak256(bytes(data.tokenURI)),
                     keccak256(bytes(data.embedOrigin)),
+                    encodedTags,
                     data.toAddress,
-                    _encodeCompletedTxs(data.transactions)
+                    encodedTxs
                 )
             )
         );
-
-        return digest.recover(signature);
     }
 
     function _encodeTx(TransactionData calldata transaction) internal pure returns (bytes memory) {
@@ -267,13 +283,25 @@ contract CubeV1 is
         returns (bytes32)
     {
         bytes32[] memory encodedTxs = new bytes32[](txData.length);
-
-        // hash each tx
-        for (uint256 i = 0; i < txData.length; i++) {
+        for (uint256 i = 0; i < txData.length;) {
             encodedTxs[i] = keccak256(_encodeTx(txData[i]));
+            unchecked {
+                ++i;
+            }
         }
 
-        // return hash of the concatenated txs
+        return keccak256(abi.encodePacked(encodedTxs));
+    }
+
+    function _encodeTags(string[] calldata tags) internal pure returns (bytes32) {
+        bytes32[] memory encodedTxs = new bytes32[](tags.length);
+        for (uint256 i = 0; i < tags.length;) {
+            encodedTxs[i] = keccak256(abi.encodePacked(tags[i]));
+            unchecked {
+                ++i;
+            }
+        }
+
         return keccak256(abi.encodePacked(encodedTxs));
     }
 

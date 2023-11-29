@@ -12,9 +12,9 @@ contract DeployProxy is Script {
     uint256 public deployerKey;
 
     string public constant NAME = "DemoCUBE";
-    string constant SYMBOL = "TCUBE";
-    string constant SIGNATURE_DOMAIN = "LAYER3";
-    string constant SIGNING_VERSION = "1";
+    string public constant SYMBOL = "TCUBE";
+    string public constant SIGNATURE_DOMAIN = "LAYER3";
+    string public constant SIGNING_VERSION = "1";
 
     function run() external returns (address) {
         if (block.chainid == 31337) {
@@ -32,7 +32,8 @@ contract DeployProxy is Script {
         vm.startBroadcast(_admin);
         CubeV1 cube = new CubeV1();
         ERC1967Proxy proxy = new ERC1967Proxy(address(cube), "");
-        CubeV1(payable(proxy)).initialize(NAME, SYMBOL, SIGNATURE_DOMAIN, SIGNING_VERSION);
+        cube = CubeV1(payable(proxy));
+        cube.initialize(NAME, SYMBOL, SIGNATURE_DOMAIN, SIGNING_VERSION);
         vm.stopBroadcast();
         return address(proxy);
     }
