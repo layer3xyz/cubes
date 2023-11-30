@@ -7,10 +7,12 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {console} from "forge-std/console.sol";
 
-contract DemoCUBE is ERC721, AccessControl, EIP712 {
+contract DemoCube2 is ERC721, AccessControl, EIP712 {
     using ECDSA for bytes32;
 
+    error TestCUBE__MintingIsNotActive();
     error TestCUBE__IsNotSigner();
     error TestCUBE__FeeNotEnough();
     error TestCUBE__SignatureAndCubesInputMismatch();
@@ -20,14 +22,14 @@ contract DemoCUBE is ERC721, AccessControl, EIP712 {
     uint256 internal _nextTokenId;
     uint256 internal questCompletionIdCounter;
 
-    bool public isMintingActive;
+    bool public isMintingActive = true;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
 
-    bytes32 internal constant STEP_COMPLETION_HASH =
-        keccak256("StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)");
+    bytes32 internal constant TX_DATA_HASH =
+        keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 timestamp,uint256 nonce,string walletName,string tokenUri,address toAddress,StepCompletionData[] steps)StepCompletionData(bytes32 stepTxHash,uint256 stepChainId)"
+        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,string[] tags,address toAddress,TransactionData[] transactions)TransactionData(bytes32 txHash,uint256 chainId)"
     );
 
     mapping(uint256 => uint256) internal questIssueNumbers;
@@ -55,24 +57,29 @@ contract DemoCUBE is ERC721, AccessControl, EIP712 {
         uint256 issueNumber,
         uint256 userId,
         uint256 completedAt,
-        string walletName
+        string walletName,
+        string embedOrigin,
+        string[] tags
     );
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
 
     struct CubeData {
         uint256 questId;
         uint256 userId;
-        uint256 timestamp;
+        uint256 completedAt;
         uint256 nonce;
-        string walletName;
-        string tokenUri;
+        uint256 price;
+        string walletProvider;
+        string tokenURI;
+        string embedOrigin;
+        string[] tags;
         address toAddress;
-        StepCompletionData[] steps;
+        TransactionData[] transactions;
     }
 
-    struct StepCompletionData {
-        bytes32 stepTxHash;
-        uint256 stepChainId;
+    struct TransactionData {
+        bytes32 txHash;
+        uint256 chainId;
     }
 
     constructor(
@@ -116,71 +123,81 @@ contract DemoCUBE is ERC721, AccessControl, EIP712 {
         delete questIssueNumbers[questId];
     }
 
-    function _mintCube(CubeData calldata cubeInput, bytes calldata signature) internal {
-        // check that signer has SIGNER_ROLE
-        address signer = _getSigner(cubeInput, signature);
-        if (!hasRole(SIGNER_ROLE, signer)) {
-            revert TestCUBE__IsNotSigner();
-        }
-
-        bool isConsumedNonce = nonces[signer][cubeInput.nonce];
-        if (isConsumedNonce) {
-            revert TestCUBE__NonceAlreadyUsed();
-        }
-
-        // cache tokenId
+    function _mintCube(CubeData calldata _data, bytes calldata signature) internal {
         uint256 tokenId = _nextTokenId;
+        uint256 issueNo = questIssueNumbers[_data.questId];
 
-        uint256 issueNo = questIssueNumbers[cubeInput.questId];
+        // scope for signer, avoids stack too deep errors
+        {
+            address signer = _getSigner(_data, signature);
+            if (!hasRole(SIGNER_ROLE, signer)) {
+                revert TestCUBE__IsNotSigner();
+            }
 
-        for (uint256 i = 0; i < cubeInput.steps.length;) {
-            emit CubeTransaction(
-                questCompletionIdCounter,
-                cubeInput.steps[i].stepTxHash,
-                cubeInput.steps[i].stepChainId
-            );
+            bool isConsumedNonce = nonces[signer][_data.nonce];
+            if (isConsumedNonce) {
+                revert TestCUBE__NonceAlreadyUsed();
+            }
+
+            for (uint256 i = 0; i < _data.transactions.length;) {
+                emit CubeTransaction(
+                    questCompletionIdCounter,
+                    _data.transactions[i].txHash,
+                    _data.transactions[i].chainId
+                );
+                unchecked {
+                    ++i;
+                }
+            }
+
+            tokenURIs[tokenId] = _data.tokenURI;
+            nonces[signer][_data.nonce] = true;
+        }
+
+        unchecked {
+            ++questCompletionIdCounter;
+            ++questIssueNumbers[_data.questId];
+            ++_nextTokenId;
+        }
+        _safeMint(_data.toAddress, tokenId);
+
+        emit CubeClaim(
+            _data.questId,
+            tokenId,
+            issueNo,
+            _data.userId,
+            _data.completedAt,
+            _data.walletProvider,
+            _data.embedOrigin,
+            _data.tags
+        );
+    }
+
+    function mintMultipleCubes(CubeData[] calldata cubeData, bytes[] calldata signatures)
+        external
+        payable
+    {
+        if (!isMintingActive) {
+            revert TestCUBE__MintingIsNotActive();
+        }
+        if (cubeData.length != signatures.length) {
+            revert TestCUBE__SignatureAndCubesInputMismatch();
+        }
+
+        uint256 totalFee;
+        for (uint256 i = 0; i < cubeData.length;) {
+            totalFee = totalFee + cubeData[i].price;
             unchecked {
                 ++i;
             }
         }
 
-        tokenURIs[tokenId] = cubeInput.tokenUri;
-        nonces[signer][cubeInput.nonce] = true;
-
-        unchecked {
-            ++questCompletionIdCounter;
-            ++questIssueNumbers[cubeInput.questId];
-            ++_nextTokenId;
-        }
-
-        _safeMint(msg.sender, tokenId);
-
-        emit CubeClaim(
-            cubeInput.questId,
-            tokenId,
-            issueNo,
-            cubeInput.userId,
-            cubeInput.timestamp,
-            cubeInput.walletName
-        );
-    }
-
-    function mintMultipleCubes(CubeData[] calldata cubeInputs, bytes[] calldata signatures)
-        external
-        payable
-    {
-        if (cubeInputs.length != signatures.length) {
-            revert TestCUBE__SignatureAndCubesInputMismatch();
-        }
-        uint256 totalFee = 777 * cubeInputs.length;
-
         if (msg.value < totalFee) {
             revert TestCUBE__FeeNotEnough();
         }
 
-        for (uint256 i = 0; i < cubeInputs.length;) {
-            _mintCube(cubeInputs[i], signatures[i]);
-
+        for (uint256 i = 0; i < cubeData.length;) {
+            _mintCube(cubeData[i], signatures[i]);
             unchecked {
                 ++i;
             }
@@ -199,43 +216,66 @@ contract DemoCUBE is ERC721, AccessControl, EIP712 {
         view
         returns (address)
     {
-        bytes32 digest = _hashTypedDataV4(
+        bytes32 digest = _computeDigest(data);
+        console.logBytes32(digest);
+        console.logBytes(signature);
+        return digest.recover(signature);
+    }
+
+    function _computeDigest(CubeData calldata data) internal view returns (bytes32) {
+        bytes32 encodedTxs = _encodeCompletedTxs(data.transactions);
+        bytes32 encodedTags = _encodeTags(data.tags);
+
+        return _hashTypedDataV4(
             keccak256(
                 abi.encode(
                     CUBE_DATA_HASH,
                     data.questId,
                     data.userId,
-                    data.timestamp,
+                    data.completedAt,
                     data.nonce,
-                    keccak256(bytes(data.walletName)),
-                    keccak256(bytes(data.tokenUri)),
+                    data.price,
+                    keccak256(bytes(data.walletProvider)),
+                    keccak256(bytes(data.tokenURI)),
+                    keccak256(bytes(data.embedOrigin)),
+                    encodedTags,
                     data.toAddress,
-                    _encodeCompletedSteps(data.steps)
+                    encodedTxs
                 )
             )
         );
-
-        return digest.recover(signature);
     }
 
-    function _encodeStep(StepCompletionData calldata step) internal pure returns (bytes memory) {
-        return abi.encode(STEP_COMPLETION_HASH, step.stepTxHash, step.stepChainId);
+    function _encodeTx(TransactionData calldata transaction) internal pure returns (bytes memory) {
+        return abi.encode(TX_DATA_HASH, transaction.txHash, transaction.chainId);
     }
 
-    function _encodeCompletedSteps(StepCompletionData[] calldata steps)
+    function _encodeCompletedTxs(TransactionData[] calldata txData)
         internal
         pure
         returns (bytes32)
     {
-        bytes32[] memory encodedSteps = new bytes32[](steps.length);
-
-        // hash each step
-        for (uint256 i = 0; i < steps.length; i++) {
-            encodedSteps[i] = keccak256(_encodeStep(steps[i]));
+        bytes32[] memory encodedTxs = new bytes32[](txData.length);
+        for (uint256 i = 0; i < txData.length;) {
+            encodedTxs[i] = keccak256(_encodeTx(txData[i]));
+            unchecked {
+                ++i;
+            }
         }
 
-        // return hash of the concatenated steps
-        return keccak256(abi.encodePacked(encodedSteps));
+        return keccak256(abi.encodePacked(encodedTxs));
+    }
+
+    function _encodeTags(string[] calldata tags) internal pure returns (bytes32) {
+        bytes32[] memory encodedTxs = new bytes32[](tags.length);
+        for (uint256 i = 0; i < tags.length;) {
+            encodedTxs[i] = keccak256(abi.encodePacked(tags[i]));
+            unchecked {
+                ++i;
+            }
+        }
+
+        return keccak256(abi.encodePacked(encodedTxs));
     }
 
     function supportsInterface(bytes4 interfaceId)

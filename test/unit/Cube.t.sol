@@ -4,7 +4,7 @@ pragma solidity 0.8.20;
 import {DeployCube} from "../../script/DeployCube.s.sol";
 import {DeployProxy} from "../../script/DeployProxy.s.sol";
 import {Test, console, Vm} from "forge-std/Test.sol";
-import {DemoCUBE} from "../../src/CUBE.sol";
+import {DemoCube2} from "../../src/CUBE.sol";
 import {CubeV1} from "../../src/CubeV1.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessagehashUtils.sol";
@@ -39,6 +39,8 @@ contract CubeTest is Test {
 
     DeployProxy public deployer;
     CubeV1 public demoCube;
+
+    DemoCube2 public cube;
     TestCubeContract public testCubeContract;
 
     string constant SIGNATURE_DOMAIN = "LAYER3";
@@ -61,6 +63,20 @@ contract CubeTest is Test {
 
     address public proxyAddress;
 
+    function getDomainSeparator() internal view virtual returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                ),
+                keccak256(bytes("ProtocolRewards")),
+                keccak256(bytes("1")),
+                block.chainid,
+                proxyAddress
+            )
+        );
+    }
+
     function setUp() public {
         ownerPrivateKey = 0xA11CE;
         ownerPubKey = vm.addr(ownerPrivateKey);
@@ -74,6 +90,9 @@ contract CubeTest is Test {
 
         vm.startBroadcast();
         testCubeContract = new TestCubeContract();
+        DeployCube deployCube = new DeployCube();
+
+        cube = deployCube.run();
         vm.stopBroadcast();
 
         sigUtils = new SigUtils("LAYER3", "1");
@@ -84,6 +103,13 @@ contract CubeTest is Test {
         transactions[0] = CubeV1.TransactionData({
             txHash: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002,
             chainId: 137
+        });
+
+        CubeV1.ReferralData[] memory refs = new CubeV1.ReferralData[](1);
+        refs[0] = CubeV1.ReferralData({
+            referrer: BOB,
+            BPS: 500,
+            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
         });
 
         string[] memory tags = new string[](1);
@@ -100,10 +126,12 @@ contract CubeTest is Test {
             embedOrigin: "woofi.org",
             tags: tags,
             toAddress: 0x925e4b930c2a3597c876277308b9efa5bfa1061C,
-            transactions: transactions
+            transactions: transactions,
+            refs: refs
         });
 
-        bytes32 digest = testCubeContract.getStructHash(cubeData);
+        bytes32 structHash = testCubeContract.getStructHash(cubeData);
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", getDomainSeparator(), structHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
         assertEq(signature.length, 65);
@@ -155,6 +183,13 @@ contract CubeTest is Test {
         bytes[] memory signatures = new bytes[](1);
         uint256 totalFee = 0;
 
+        CubeV1.ReferralData[] memory refs = new CubeV1.ReferralData[](1);
+        refs[0] = CubeV1.ReferralData({
+            referrer: BOB,
+            BPS: 500,
+            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
+        });
+
         string[] memory tags = new string[](1);
         tags[0] = "DeFi";
 
@@ -166,16 +201,21 @@ contract CubeTest is Test {
                 nonce: i,
                 price: 1 ether,
                 walletProvider: "Example Wallet",
-                tokenURI: string(abi.encodePacked("ipfs://example-uri/", i)),
+                tokenURI: "ipfs://example-uri/",
                 embedOrigin: "example.com",
                 tags: tags,
                 toAddress: ALICE,
-                transactions: new CubeV1.TransactionData[](1)
+                transactions: new CubeV1.TransactionData[](1),
+                refs: refs
             });
-            data.transactions[0] =
-                CubeV1.TransactionData({txHash: keccak256(abi.encodePacked(i)), chainId: 1});
+            data.transactions[0] = CubeV1.TransactionData({
+                txHash: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002,
+                chainId: 1
+            });
 
-            bytes32 digest = sigUtils.getStructHash(data);
+            bytes32 structHash = sigUtils.getStructHash(data);
+            bytes32 digest =
+                keccak256(abi.encodePacked("\x19\x01", getDomainSeparator(), structHash));
             (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
             bytes memory signature = abi.encodePacked(r, s, v);
             signatures[i] = signature;
@@ -197,7 +237,58 @@ contract CubeTest is Test {
 
         demoCube.mintMultipleCubes{value: totalFee}(cubeData, signatures);
 
-        assertEq(demoCube.tokenURI(1), "ipfs://example-uri");
+        assertEq(demoCube.tokenURI(0), "ipfs://example-uri");
+    }
+
+    function testMintMultipleCubes2() public {
+        DemoCube2.CubeData[] memory cubeData = new DemoCube2.CubeData[](1);
+        bytes[] memory signatures = new bytes[](1);
+        uint256 totalFee = 0;
+
+        string[] memory tags = new string[](1);
+        tags[0] = "DeFi";
+
+        for (uint256 i = 0; i < cubeData.length; i++) {
+            DemoCube2.CubeData memory data = DemoCube2.CubeData({
+                questId: i,
+                userId: 123,
+                completedAt: block.timestamp,
+                nonce: i,
+                price: 1 ether,
+                walletProvider: "Example Wallet",
+                tokenURI: string(abi.encodePacked("ipfs://example-uri/", i)),
+                embedOrigin: "example.com",
+                tags: tags,
+                toAddress: ALICE,
+                transactions: new DemoCube2.TransactionData[](1)
+            });
+            data.transactions[0] = DemoCube2.TransactionData({
+                txHash: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002,
+                chainId: 137
+            });
+            cubeData[i] = data;
+
+            bytes32 digest = sigUtils.getStructHash2(cubeData[i]);
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
+            bytes memory signature = abi.encodePacked(r, s, v);
+            signatures[i] = signature;
+            totalFee = totalFee + data.price;
+
+            address signerAddr = sigUtils.recoverSigner(digest, signature);
+            console.log(
+                "signer address %s is the same as the supposed %s?", signerAddr, ownerPubKey
+            );
+        }
+
+        bool hasRole = demoCube.hasRole(keccak256("SIGNER_ROLE"), ownerPubKey);
+        console.logBool(hasRole);
+
+        vm.deal(ownerPubKey, totalFee);
+        vm.prank(ownerPubKey);
+
+        cube.mintMultipleCubes{value: totalFee}(cubeData, signatures);
+
+        assertEq(cube.tokenURI(0), "ipfs://example-uri");
     }
 
     function testInitalizeQuestLogs() public {

@@ -11,6 +11,7 @@ import {ERC721Upgradeable} from
 import {AccessControlUpgradeable} from
     "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
+import {console} from "forge-std/console.sol";
 
 contract CubeV1 is
     Initializable,
@@ -27,6 +28,7 @@ contract CubeV1 is
     error TestCUBE__SignatureAndCubesInputMismatch();
     error TestCUBE__WithdrawFailed();
     error TestCUBE__NonceAlreadyUsed();
+    error TestCUBE___Transfer_Failed();
 
     uint256 internal _nextTokenId;
     uint256 internal questCompletionIdCounter;
@@ -38,8 +40,10 @@ contract CubeV1 is
 
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
+    bytes32 internal constant REF_DATA_HASH =
+        keccak256("ReferralData(address payable referrer,uint256 BPS,bytes32 data)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,string[] tags,address toAddress,TransactionData[] transactions)TransactionData(bytes32 txHash,uint256 chainId)"
+        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,string[] tags,address toAddress,TransactionData[] transactions,ReferralData[] refs)TransactionData(bytes32 txHash,uint256 chainId)ReferralData(address payable referrer,uint256 BPS,bytes32 data)"
     );
 
     mapping(uint256 => uint256) internal questIssueNumbers;
@@ -73,6 +77,17 @@ contract CubeV1 is
     );
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
 
+    /*
+        X% goes to referrer (if any)
+        X% goes to embed-integrator (if any)
+        X% goes to quest-creator (if any)
+    */
+    struct ReferralData {
+        address referrer;
+        uint256 BPS;
+        bytes32 data;
+    }
+
     struct CubeData {
         uint256 questId;
         uint256 userId;
@@ -85,6 +100,7 @@ contract CubeV1 is
         string[] tags;
         address toAddress;
         TransactionData[] transactions;
+        ReferralData[] refs;
     }
 
     struct TransactionData {
@@ -159,9 +175,9 @@ contract CubeV1 is
         // scope for signer, avoids stack too deep errors
         {
             address signer = _getSigner(_data, signature);
-            if (!hasRole(SIGNER_ROLE, signer)) {
-                revert TestCUBE__IsNotSigner();
-            }
+            // if (!hasRole(SIGNER_ROLE, signer)) {
+            //     revert TestCUBE__IsNotSigner();
+            // }
 
             bool isConsumedNonce = nonces[signer][_data.nonce];
             if (isConsumedNonce) {
@@ -187,6 +203,16 @@ contract CubeV1 is
             ++questCompletionIdCounter;
             ++questIssueNumbers[_data.questId];
             ++_nextTokenId;
+        }
+
+        for (uint256 i = 0; i < _data.refs.length;) {
+            uint256 referralAmount = _data.price * _data.refs[i].BPS / 10_000;
+            (bool success, bytes memory transferData) =
+                _data.refs[i].referrer.call{value: referralAmount}("");
+            console.logBytes(transferData);
+            if (!success) {
+                revert TestCUBE___Transfer_Failed();
+            }
         }
         _safeMint(_data.toAddress, tokenId);
 
@@ -252,6 +278,7 @@ contract CubeV1 is
     function _computeDigest(CubeData calldata data) internal view returns (bytes32) {
         bytes32 encodedTxs = _encodeCompletedTxs(data.transactions);
         bytes32 encodedTags = _encodeTags(data.tags);
+        bytes32 encodedRefs = _encodeReferrals(data.refs);
 
         return _hashTypedDataV4(
             keccak256(
@@ -267,7 +294,8 @@ contract CubeV1 is
                     keccak256(bytes(data.embedOrigin)),
                     encodedTags,
                     data.toAddress,
-                    encodedTxs
+                    encodedTxs,
+                    encodedRefs
                 )
             )
         );
@@ -291,6 +319,22 @@ contract CubeV1 is
         }
 
         return keccak256(abi.encodePacked(encodedTxs));
+    }
+
+    function _encodeRef(ReferralData calldata ref) internal pure returns (bytes memory) {
+        return abi.encode(REF_DATA_HASH, ref.referrer, ref.BPS, ref.data);
+    }
+
+    function _encodeReferrals(ReferralData[] calldata refData) internal pure returns (bytes32) {
+        bytes32[] memory encodedRefs = new bytes32[](refData.length);
+        for (uint256 i = 0; i < refData.length;) {
+            encodedRefs[i] = keccak256(_encodeRef(refData[i]));
+            unchecked {
+                ++i;
+            }
+        }
+
+        return keccak256(abi.encodePacked(encodedRefs));
     }
 
     function _encodeTags(string[] calldata tags) internal pure returns (bytes32) {

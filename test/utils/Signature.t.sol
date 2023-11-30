@@ -3,6 +3,7 @@ pragma solidity 0.8.20;
 
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {CubeV1} from "../../src/CubeV1.sol";
+import {DemoCube2} from "../../src/CUBE.sol";
 
 contract SigUtils {
     bytes32 internal immutable i_domain;
@@ -15,8 +16,10 @@ contract SigUtils {
 
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
+    bytes32 internal constant REF_DATA_HASH =
+        keccak256("ReferralData(address payable referrer,uint256 BPS,bytes32 data)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,string[] tags,address toAddress,TransactionData[] transactions)TransactionData(bytes32 txHash,uint256 chainId)"
+        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,string[] tags,address toAddress,TransactionData[] transactions,ReferralData[] refs)TransactionData(bytes32 txHash,uint256 chainId)ReferralData(address payable referrer,uint256 BPS,bytes32 data)"
     );
     bytes32 private constant TYPE_HASH = keccak256(
         "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
@@ -73,7 +76,91 @@ contract SigUtils {
         return keccak256(abi.encodePacked(encodedTxs));
     }
 
+    function _encodeRef(CubeV1.ReferralData calldata ref) internal pure returns (bytes memory) {
+        return abi.encode(REF_DATA_HASH, ref.referrer, ref.BPS, ref.data);
+    }
+
+    function _encodeReferrals(CubeV1.ReferralData[] calldata refData)
+        internal
+        pure
+        returns (bytes32)
+    {
+        bytes32[] memory encodedRefs = new bytes32[](refData.length);
+        for (uint256 i = 0; i < refData.length;) {
+            encodedRefs[i] = keccak256(_encodeRef(refData[i]));
+            unchecked {
+                ++i;
+            }
+        }
+
+        return keccak256(abi.encodePacked(encodedRefs));
+    }
+
+    function getStructHash2(DemoCube2.CubeData memory data) external view returns (bytes32) {
+        bytes32 encodedTxs = _encodeCompletedTxs2(data.transactions);
+        bytes32 encodedTags = _encodeTags2(data.tags);
+        bytes32 digest = _hashTypedDataV4(
+            keccak256(
+                abi.encode(
+                    CUBE_DATA_HASH,
+                    data.questId,
+                    data.userId,
+                    data.completedAt,
+                    data.nonce,
+                    data.price,
+                    keccak256(bytes(data.walletProvider)),
+                    keccak256(bytes(data.tokenURI)),
+                    keccak256(bytes(data.embedOrigin)),
+                    encodedTags,
+                    data.toAddress,
+                    encodedTxs
+                )
+            )
+        );
+
+        return digest;
+    }
+
+    function _encodeTx2(DemoCube2.TransactionData memory transaction)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encode(TX_DATA_HASH, transaction.txHash, transaction.chainId);
+    }
+
+    function _encodeCompletedTxs2(DemoCube2.TransactionData[] memory txData)
+        internal
+        pure
+        returns (bytes32)
+    {
+        bytes32[] memory encodedTxs = new bytes32[](txData.length);
+        // hash each tx
+        for (uint256 i = 0; i < txData.length;) {
+            encodedTxs[i] = keccak256(_encodeTx2(txData[i]));
+            unchecked {
+                ++i;
+            }
+        }
+
+        // return hash of the concatenated txs
+        return keccak256(abi.encodePacked(encodedTxs));
+    }
+
     function _encodeTags(string[] calldata tags) internal pure returns (bytes32) {
+        bytes32[] memory encodedTxs = new bytes32[](tags.length);
+        for (uint256 i = 0; i < tags.length;) {
+            encodedTxs[i] = keccak256(abi.encodePacked(tags[i]));
+            unchecked {
+                ++i;
+            }
+        }
+
+        // return hash of the concatenated txs
+        return keccak256(abi.encodePacked(encodedTxs));
+    }
+
+    function _encodeTags2(string[] memory tags) internal pure returns (bytes32) {
         bytes32[] memory encodedTxs = new bytes32[](tags.length);
         for (uint256 i = 0; i < tags.length;) {
             encodedTxs[i] = keccak256(abi.encodePacked(tags[i]));

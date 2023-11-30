@@ -24,3 +24,4 @@ runs = 150
 depth = 50
 fail_on_revert = true
 
+gas_reports = ["CubeV1"]

@@ -2,7 +2,7 @@
 pragma solidity 0.8.20;
 
 import {Script} from "forge-std/Script.sol";
-import {DemoCUBE} from "../src/CUBE.sol";
+import {DemoCube2} from "../src/CUBE.sol";
 
 contract DeployCube is Script {
     // private key is the same for everyone
@@ -15,18 +15,16 @@ contract DeployCube is Script {
     string constant SIGNATURE_DOMAIN = "LAYER3";
     string constant SIGNING_VERSION = "1";
 
-    function run() external returns (DemoCUBE) {
+    function run() external returns (DemoCube2) {
         if (block.chainid == 31337) {
             deployerKey = DEFAULT_ANVIL_PRIVATE_KEY;
         } else {
             deployerKey = vm.envUint("PRIVATE_KEY");
         }
 
-        vm.startBroadcast(deployerKey);
-        DemoCUBE cube = new DemoCUBE(
+        DemoCube2 cube = new DemoCube2(
             NAME, SYMBOL, SIGNATURE_DOMAIN, SIGNING_VERSION
         );
-        vm.stopBroadcast();
         return cube;
     }
 }
