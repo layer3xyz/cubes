@@ -15,10 +15,10 @@ contract UpgradeCube is Script {
     uint256 public deployerKey;
     address public OWNER = address(0);
 
-    function run(address _proxyAddress) external returns (address) {
-        address proxy = upgradeCube(OWNER, _proxyAddress, 55);
-        return proxy;
-    }
+    // function run(address _proxyAddress) external returns (address) {
+    //     address proxy = upgradeCube(OWNER, _proxyAddress, 55);
+    //     return proxy;
+    // }
 
     function upgradeCube(address _admin, address _proxyAddress, uint256 _newVal)
         public

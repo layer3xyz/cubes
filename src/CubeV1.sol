@@ -11,8 +11,12 @@ import {ERC721Upgradeable} from
 import {AccessControlUpgradeable} from
     "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {console} from "forge-std/console.sol";
 
+/**
+ * @title CubeV1
+ * @dev Implementation of an NFT smart contract with EIP712 signatures for secure, off-chain minting.
+ *      The contract is upgradeable using OpenZeppelin's UUPSUpgradeable pattern.
+ */
 contract CubeV1 is
     Initializable,
     ERC721Upgradeable,
@@ -22,21 +26,28 @@ contract CubeV1 is
 {
     using ECDSA for bytes32;
 
+    /// @dev Indicates an operation was attempted by an address that is not an authorized signer
     error TestCUBE__IsNotSigner();
+    /// @dev Indicates a minting operation was attempted while minting is not active
     error TestCUBE__MintingIsNotActive();
+    /// @dev Indicates the provided fee for minting is not sufficient
     error TestCUBE__FeeNotEnough();
+    /// @dev Indicates a mismatch between the number of provided signatures and Cube data entries
     error TestCUBE__SignatureAndCubesInputMismatch();
+    /// @dev Indicates a failure in withdrawing funds from the contract
     error TestCUBE__WithdrawFailed();
+    /// @dev Indicates an operation was attempted with a nonce that has already been used
     error TestCUBE__NonceAlreadyUsed();
-    error TestCUBE___Transfer_Failed();
+    /// @dev Indicates a transfer operation within the contract has failed
+    error TestCUBE___TransferFailed();
 
     uint256 internal _nextTokenId;
     uint256 internal questCompletionIdCounter;
 
     bool public isMintingActive;
 
-    bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
-    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER_ROLE");
+    bytes32 public constant SIGNER_ROLE = keccak256("SIGNER");
+    bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER");
 
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
@@ -61,10 +72,29 @@ contract CubeV1 is
         ADVANCED
     }
 
+    /// @notice Emitted when a new quest is initialized
+    /// @param questId The unique identifier of the quest
+    /// @param questType The type of the quest (QUEST, STREAK, etc.)
+    /// @param difficulty The difficulty level of the quest (BEGINNER, INTERMEDIATE, ADVANCED)
+    /// @param title The title of the quest
     event QuestMetadata(
         uint256 indexed questId, QuestType questType, Difficulty difficulty, string title
     );
+
+    /// @notice Emitted when a community is associated with a quest
+    /// @param questId The unique identifier of the quest
+    /// @param community The name of the community associated with the quest
     event QuestCommunity(uint256 indexed questId, string community);
+
+    /// @notice Emitted when a Cube NFT is claimed
+    /// @param questId The quest ID associated with the Cube
+    /// @param tokenId The token ID of the minted Cube
+    /// @param issueNumber The issue number of the Cube
+    /// @param userId The ID of the user who claimed the Cube
+    /// @param completedAt The timestamp when the Cube was claimed
+    /// @param walletName The name of the wallet provider used for claiming
+    /// @param embedOrigin The origin of the embed associated with the Cube
+    /// @param tags An array of tags associated with the Cube
     event CubeClaim(
         uint256 indexed questId,
         uint256 indexed tokenId,
@@ -75,7 +105,18 @@ contract CubeV1 is
         string embedOrigin,
         string[] tags
     );
+
+    /// @notice Emitted for each transaction associated with a Cube claim
+    /// @param tokenId The token ID of the Cube
+    /// @param txHash The hash of the transaction
+    /// @param chainId The blockchain chain ID of the transaction
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
+
+    /// @notice Emitted when a referral payout is made
+    /// @param referrer The address of the referrer receiving the payout
+    /// @param amount The amount of the referral payout
+    /// @param data Additional data associated with the referral
+    event ReferralPayout(address indexed referrer, uint256 amount, bytes32 data);
 
     struct CubeData {
         uint256 questId;
@@ -108,6 +149,13 @@ contract CubeV1 is
         _disableInitializers();
     }
 
+    /// @notice Initializes the CubeV1 contract with necessary parameters
+    /// @dev Sets up the ERC721 token with given name and symbol, and grants initial roles.
+    /// @param _name Name of the NFT collection
+    /// @param _symbol Symbol of the NFT collection
+    /// @param _signingDomain Domain used for EIP712 signing
+    /// @param _signatureVersion Version of the EIP712 signature
+    /// @param _admin Address to be granted the admin roles
     function initialize(
         string memory _name,
         string memory _symbol,
@@ -121,30 +169,53 @@ contract CubeV1 is
         __UUPSUpgradeable_init();
         isMintingActive = true;
 
-        // TODO: update these so they're not msg.sender?
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
         _grantRole(SIGNER_ROLE, _admin);
         _grantRole(UPGRADER_ROLE, _admin);
     }
 
+    /// @notice Authorizes an upgrade to a new contract implementation
+    /// @dev Overrides the UUPSUpgradeable internal function with access control.
+    /// @param newImplementation Address of the new contract implementation
     function _authorizeUpgrade(address newImplementation)
         internal
         override
         onlyRole(UPGRADER_ROLE)
     {}
 
-    function setTokenURI(uint256 _tokenId, string memory newuri) external onlyRole(SIGNER_ROLE) {
-        tokenURIs[_tokenId] = newuri;
+    /// @notice Sets the URI for a given token
+    /// @dev Can only be called by an account with the default admin role.
+    /// @param _tokenId The ID of the token
+    /// @param _uri The URI to be set for the token
+    function setTokenURI(uint256 _tokenId, string memory _uri)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
+        tokenURIs[_tokenId] = _uri;
     }
 
+    /// @notice Retrieves the URI for a given token
+    /// @dev Overrides the ERC721Upgradeable's tokenURI method.
+    /// @param _tokenId The ID of the token
+    /// @return _tokenURI The URI of the specified token
     function tokenURI(uint256 _tokenId) public view override returns (string memory _tokenURI) {
         return tokenURIs[_tokenId];
     }
 
-    function setIsMintingActive(bool _isMintingActive) external onlyRole(SIGNER_ROLE) {
+    /// @notice Enables or disables the minting process
+    /// @dev Can only be called by an account with the default admin role.
+    /// @param _isMintingActive Boolean indicating whether minting should be active
+    function setIsMintingActive(bool _isMintingActive) external onlyRole(DEFAULT_ADMIN_ROLE) {
         isMintingActive = _isMintingActive;
     }
 
+    /// @notice Initializes a new quest with given parameters
+    /// @dev Can only be called by an account with the signer role.
+    /// @param questId Unique identifier for the quest
+    /// @param communities Array of community names associated with the quest
+    /// @param title Title of the quest
+    /// @param difficulty Difficulty level of the quest
+    /// @param questType Type of the quest
     function initializeQuest(
         uint256 questId,
         string[] memory communities,
@@ -162,13 +233,17 @@ contract CubeV1 is
         emit QuestMetadata(questId, questType, difficulty, title);
     }
 
-    function _mintCube(CubeData calldata _data, bytes calldata signature) internal {
+    /// @notice Internal function to handle the logic of minting a single cube
+    /// @dev Verifies the signer, handles nonce, transactions, referral payments, and minting.
+    /// @param _data The CubeData containing details of the minting
+    /// @param _signature The signature for verification
+    function _mintCube(CubeData calldata _data, bytes calldata _signature) internal {
         uint256 tokenId = _nextTokenId;
         uint256 issueNo = questIssueNumbers[_data.questId];
 
         // scope for signer, avoids stack too deep errors
         {
-            address signer = _getSigner(_data, signature);
+            address signer = _getSigner(_data, _signature);
             if (!hasRole(SIGNER_ROLE, signer)) {
                 revert TestCUBE__IsNotSigner();
             }
@@ -201,10 +276,12 @@ contract CubeV1 is
 
         for (uint256 i = 0; i < _data.refs.length;) {
             uint256 referralAmount = _data.price * _data.refs[i].BPS / 10_000;
-            (bool success,) = _data.refs[i].referrer.call{value: referralAmount}("");
+            address referrer = _data.refs[i].referrer;
+            (bool success,) = referrer.call{value: referralAmount}("");
             if (!success) {
-                revert TestCUBE___Transfer_Failed();
+                revert TestCUBE___TransferFailed();
             }
+            emit ReferralPayout(referrer, referralAmount, _data.refs[i].data);
             unchecked {
                 ++i;
             }
@@ -223,6 +300,10 @@ contract CubeV1 is
         );
     }
 
+    /// @notice Mints multiple cubes based on provided data and signatures
+    /// @dev Checks if minting is active, matches cube data with signatures, and processes each mint.
+    /// @param cubeData Array of CubeData structures containing minting information
+    /// @param signatures Array of signatures corresponding to each CubeData
     function mintMultipleCubes(CubeData[] calldata cubeData, bytes[] calldata signatures)
         external
         payable
@@ -254,6 +335,8 @@ contract CubeV1 is
         }
     }
 
+    /// @notice Withdraws the contract's balance to the message sender
+    /// @dev Can only be called by an account with the default admin role.
     function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
         (bool success,) = msg.sender.call{value: address(this).balance}("");
         if (!success) {
@@ -270,7 +353,7 @@ contract CubeV1 is
         return digest.recover(signature);
     }
 
-    function _computeDigest(CubeData calldata data) public view returns (bytes32) {
+    function _computeDigest(CubeData calldata data) internal view returns (bytes32) {
         bytes32 encodedTxs = _encodeCompletedTxs(data.transactions);
         bytes32 encodedTags = _encodeTags(data.tags);
         bytes32 encodedRefs = _encodeReferrals(data.refs);
@@ -344,6 +427,10 @@ contract CubeV1 is
         return keccak256(abi.encodePacked(encodedTxs));
     }
 
+    /// @notice Checks if the contract implements an interface
+    /// @dev Overrides the supportsInterface function of ERC721Upgradeable and AccessControlUpgradeable.
+    /// @param interfaceId The interface identifier, as specified in ERC-165
+    /// @return True if the contract implements the interface, false otherwise
     function supportsInterface(bytes4 interfaceId)
         public
         view
