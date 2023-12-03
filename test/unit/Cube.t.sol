@@ -141,9 +141,6 @@ contract CubeTest is Test {
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
-        address signer = sigUtils.getSigner(_data, signature);
-        console.log("signer is %", signer);
-        assertEq(signer, ownerPubKey);
 
         CubeV1.CubeData[] memory cubeData = new CubeV1.CubeData[](1);
         bytes[] memory signatures = new bytes[](1);

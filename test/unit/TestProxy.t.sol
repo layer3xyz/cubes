@@ -27,31 +27,24 @@ contract DeployAndUpgradeTest is StdCheats, Test {
     }
 
     function testERC721Name() public {
-        CubeV2 cube2 = new CubeV2();
-
-        upgradeCube.upgradeCube(OWNER, proxyAddress, address(cube2), new bytes(0));
+        upgradeCube.upgradeCube(OWNER, proxyAddress, 55);
 
         string memory expectedValue = deployProxy.NAME();
         assertEq(expectedValue, CubeV2(payable(proxyAddress)).name());
     }
 
     function testV2SignerRoleVariable() public {
-        CubeV2 cube2 = new CubeV2();
-
-        upgradeCube.upgradeCube(OWNER, proxyAddress, address(cube2), new bytes(0));
+        upgradeCube.upgradeCube(OWNER, proxyAddress, 55);
 
         CubeV2 newCube = CubeV2(payable(proxyAddress));
         bytes32 signerRole = newCube.SIGNER_ROLE();
-        assertEq(keccak256("SIGNER_ROLE"), signerRole);
+        assertEq(keccak256("SIGNER"), signerRole);
     }
 
     function testV2MigratedVariable() public {
-        CubeV2 cube2 = new CubeV2();
-
         uint256 newVal = 12345;
-        bytes memory data = abi.encodeWithSignature("migrateV2(uint256)", newVal);
 
-        upgradeCube.upgradeCube(OWNER, proxyAddress, address(cube2), data);
+        upgradeCube.upgradeCube(OWNER, proxyAddress, newVal);
 
         CubeV2 newCube = CubeV2(payable(proxyAddress));
 

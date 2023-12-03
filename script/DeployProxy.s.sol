@@ -4,6 +4,7 @@ pragma solidity 0.8.20;
 import {Script} from "forge-std/Script.sol";
 import {CubeV1} from "../src/CubeV1.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
+import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract DeployProxy is Script {
     // private key is the same for everyone
@@ -30,10 +31,12 @@ contract DeployProxy is Script {
 
     function deployProxy(address _admin) public returns (address) {
         vm.startBroadcast(_admin);
-        CubeV1 cube = new CubeV1();
-        ERC1967Proxy proxy = new ERC1967Proxy(address(cube), "");
-        cube = CubeV1(payable(proxy));
-        cube.initialize(NAME, SYMBOL, SIGNATURE_DOMAIN, SIGNING_VERSION, _admin);
+        address proxy = Upgrades.deployUUPSProxy(
+            "CubeV1.sol",
+            abi.encodeCall(
+                CubeV1.initialize, (NAME, SYMBOL, SIGNATURE_DOMAIN, SIGNING_VERSION, _admin)
+            )
+        );
         vm.stopBroadcast();
         return address(proxy);
     }
