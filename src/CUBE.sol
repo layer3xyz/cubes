@@ -24,12 +24,14 @@ contract DemoCube2 is ERC721, AccessControl, EIP712 {
 
     bool public isMintingActive = true;
 
-    bytes32 public constant SIGNER_ROLE = keccak256("SIGNER_ROLE");
+    bytes32 public constant SIGNER_ROLE = keccak256("SIGNER");
 
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
+    bytes32 internal constant REF_DATA_HASH =
+        keccak256("ReferralData(address payable referrer,uint256 BPS,bytes32 data)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,string[] tags,address toAddress,TransactionData[] transactions)TransactionData(bytes32 txHash,uint256 chainId)"
+        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,string[] tags,address toAddress,TransactionData[] transactions,ReferralData[] refs)TransactionData(bytes32 txHash,uint256 chainId)ReferralData(address payable referrer,uint256 BPS,bytes32 data)"
     );
 
     mapping(uint256 => uint256) internal questIssueNumbers;
@@ -63,6 +65,12 @@ contract DemoCube2 is ERC721, AccessControl, EIP712 {
     );
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
 
+    struct ReferralData {
+        address referrer;
+        uint256 BPS;
+        bytes32 data;
+    }
+
     struct CubeData {
         uint256 questId;
         uint256 userId;
@@ -75,6 +83,7 @@ contract DemoCube2 is ERC721, AccessControl, EIP712 {
         string[] tags;
         address toAddress;
         TransactionData[] transactions;
+        ReferralData[] refs;
     }
 
     struct TransactionData {

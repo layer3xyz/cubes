@@ -1,218 +1,82 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {CubeV1} from "../../src/CubeV1.sol";
-import {DemoCube2} from "../../src/CUBE.sol";
+import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessagehashUtils.sol";
 
-contract SigUtils {
-    bytes32 internal immutable i_domain;
-    bytes32 internal immutable i_version;
+contract SigUtils is CubeV1 {
+    using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
 
-    constructor(string memory _domain, string memory _version) {
-        i_domain = keccak256(bytes(_domain));
-        i_version = keccak256(bytes(_version));
-    }
-
-    bytes32 internal constant TX_DATA_HASH =
-        keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
-    bytes32 internal constant REF_DATA_HASH =
-        keccak256("ReferralData(address payable referrer,uint256 BPS,bytes32 data)");
-    bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,string[] tags,address toAddress,TransactionData[] transactions,ReferralData[] refs)TransactionData(bytes32 txHash,uint256 chainId)ReferralData(address payable referrer,uint256 BPS,bytes32 data)"
-    );
-    bytes32 private constant TYPE_HASH = keccak256(
-        "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
-    );
-
-    function getStructHash(CubeV1.CubeData calldata data) external view returns (bytes32) {
+    function getStructHash(CubeData calldata data) public pure returns (bytes32) {
         bytes32 encodedTxs = _encodeCompletedTxs(data.transactions);
         bytes32 encodedTags = _encodeTags(data.tags);
-        bytes32 digest = _hashTypedDataV4(
-            keccak256(
-                abi.encode(
-                    CUBE_DATA_HASH,
-                    data.questId,
-                    data.userId,
-                    data.completedAt,
-                    data.nonce,
-                    data.price,
-                    keccak256(bytes(data.walletProvider)),
-                    keccak256(bytes(data.tokenURI)),
-                    keccak256(bytes(data.embedOrigin)),
-                    encodedTags,
-                    data.toAddress,
-                    encodedTxs
-                )
+        bytes32 encodedRefs = _encodeReferrals(data.refs);
+
+        return keccak256(
+            abi.encode(
+                CUBE_DATA_HASH,
+                data.questId,
+                data.userId,
+                data.completedAt,
+                data.nonce,
+                data.price,
+                keccak256(bytes(data.walletProvider)),
+                keccak256(bytes(data.tokenURI)),
+                keccak256(bytes(data.embedOrigin)),
+                encodedTags,
+                data.toAddress,
+                encodedTxs,
+                encodedRefs
             )
         );
-
-        return digest;
     }
 
-    function _encodeTx(CubeV1.TransactionData calldata transaction)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encode(TX_DATA_HASH, transaction.txHash, transaction.chainId);
-    }
-
-    function _encodeCompletedTxs(CubeV1.TransactionData[] calldata txData)
-        internal
-        pure
-        returns (bytes32)
-    {
-        bytes32[] memory encodedTxs = new bytes32[](txData.length);
-        // hash each tx
-        for (uint256 i = 0; i < txData.length;) {
-            encodedTxs[i] = keccak256(_encodeTx(txData[i]));
-            unchecked {
-                ++i;
-            }
-        }
-
-        // return hash of the concatenated txs
-        return keccak256(abi.encodePacked(encodedTxs));
-    }
-
-    function _encodeRef(CubeV1.ReferralData calldata ref) internal pure returns (bytes memory) {
-        return abi.encode(REF_DATA_HASH, ref.referrer, ref.BPS, ref.data);
-    }
-
-    function _encodeReferrals(CubeV1.ReferralData[] calldata refData)
-        internal
-        pure
-        returns (bytes32)
-    {
-        bytes32[] memory encodedRefs = new bytes32[](refData.length);
-        for (uint256 i = 0; i < refData.length;) {
-            encodedRefs[i] = keccak256(_encodeRef(refData[i]));
-            unchecked {
-                ++i;
-            }
-        }
-
-        return keccak256(abi.encodePacked(encodedRefs));
-    }
-
-    function getStructHash2(DemoCube2.CubeData memory data) external view returns (bytes32) {
-        bytes32 encodedTxs = _encodeCompletedTxs2(data.transactions);
-        bytes32 encodedTags = _encodeTags2(data.tags);
-        bytes32 digest = _hashTypedDataV4(
-            keccak256(
-                abi.encode(
-                    CUBE_DATA_HASH,
-                    data.questId,
-                    data.userId,
-                    data.completedAt,
-                    data.nonce,
-                    data.price,
-                    keccak256(bytes(data.walletProvider)),
-                    keccak256(bytes(data.tokenURI)),
-                    keccak256(bytes(data.embedOrigin)),
-                    encodedTags,
-                    data.toAddress,
-                    encodedTxs
-                )
-            )
-        );
-
-        return digest;
-    }
-
-    function _encodeTx2(DemoCube2.TransactionData memory transaction)
-        internal
-        pure
-        returns (bytes memory)
-    {
-        return abi.encode(TX_DATA_HASH, transaction.txHash, transaction.chainId);
-    }
-
-    function _encodeCompletedTxs2(DemoCube2.TransactionData[] memory txData)
-        internal
-        pure
-        returns (bytes32)
-    {
-        bytes32[] memory encodedTxs = new bytes32[](txData.length);
-        // hash each tx
-        for (uint256 i = 0; i < txData.length;) {
-            encodedTxs[i] = keccak256(_encodeTx2(txData[i]));
-            unchecked {
-                ++i;
-            }
-        }
-
-        // return hash of the concatenated txs
-        return keccak256(abi.encodePacked(encodedTxs));
-    }
-
-    function _encodeTags(string[] calldata tags) internal pure returns (bytes32) {
-        bytes32[] memory encodedTxs = new bytes32[](tags.length);
-        for (uint256 i = 0; i < tags.length;) {
-            encodedTxs[i] = keccak256(abi.encodePacked(tags[i]));
-            unchecked {
-                ++i;
-            }
-        }
-
-        // return hash of the concatenated txs
-        return keccak256(abi.encodePacked(encodedTxs));
-    }
-
-    function _encodeTags2(string[] memory tags) internal pure returns (bytes32) {
-        bytes32[] memory encodedTxs = new bytes32[](tags.length);
-        for (uint256 i = 0; i < tags.length;) {
-            encodedTxs[i] = keccak256(abi.encodePacked(tags[i]));
-            unchecked {
-                ++i;
-            }
-        }
-
-        // return hash of the concatenated txs
-        return keccak256(abi.encodePacked(encodedTxs));
-    }
-
-    function _buildDomainSeparator() private view returns (bytes32) {
-        return keccak256(abi.encode(TYPE_HASH, i_domain, i_version, block.chainid, address(this)));
-    }
-
-    function _hashTypedDataV4(bytes32 structHash) internal view virtual returns (bytes32) {
-        // toTypedDataHash takes care of the "\x19\x01"
-        return MessageHashUtils.toTypedDataHash(_buildDomainSeparator(), structHash);
-    }
-
-    function recoverSigner(bytes32 _ethSignedMessageHash, bytes memory _signature)
+    function getSigner(CubeData calldata data, bytes calldata signature)
         public
-        pure
+        view
         returns (address)
     {
-        (bytes32 r, bytes32 s, uint8 v) = splitSignature(_signature);
-
-        return ecrecover(_ethSignedMessageHash, v, r, s);
+        return _getSigner(data, signature);
     }
 
-    function splitSignature(bytes memory sig) public pure returns (bytes32 r, bytes32 s, uint8 v) {
-        require(sig.length == 65, "invalid signature length");
+    function getDigest(bytes32 domainSeparator, bytes32 structHash) public pure returns (bytes32) {
+        return MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
+    }
 
-        assembly {
-            /*
-            First 32 bytes stores the length of the signature
+    function getTestCubeData(address _referrer, address _mintTo)
+        public
+        pure
+        returns (CubeV1.CubeData memory)
+    {
+        string[] memory tags = new string[](1);
+        tags[0] = "DeFi";
+        CubeV1.TransactionData[] memory transactions = new CubeV1.TransactionData[](1);
+        transactions[0] = CubeV1.TransactionData({
+            txHash: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002,
+            chainId: 137
+        });
 
-            add(sig, 32) = pointer of sig + 32
-            effectively, skips first 32 bytes of signature
-
-            mload(p) loads next 32 bytes starting at the memory address p into memory
-            */
-
-            // first 32 bytes, after the length prefix
-            r := mload(add(sig, 32))
-            // second 32 bytes
-            s := mload(add(sig, 64))
-            // final byte (first byte of the next 32 bytes)
-            v := byte(0, mload(add(sig, 96)))
-        }
-
-        // implicitly return (r, s, v)
+        CubeV1.ReferralData[] memory refs = new CubeV1.ReferralData[](1);
+        refs[0] = CubeV1.ReferralData({
+            referrer: _referrer,
+            BPS: 500,
+            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
+        });
+        return CubeV1.CubeData({
+            questId: 1,
+            userId: 1,
+            completedAt: 6,
+            nonce: 1,
+            price: 3,
+            walletProvider: "MetaMask",
+            tokenURI: "ipfs://abc",
+            embedOrigin: "test",
+            tags: tags,
+            toAddress: _mintTo,
+            transactions: transactions,
+            refs: refs
+        });
     }
 }

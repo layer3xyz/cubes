@@ -33,7 +33,7 @@ contract DeployProxy is Script {
         CubeV1 cube = new CubeV1();
         ERC1967Proxy proxy = new ERC1967Proxy(address(cube), "");
         cube = CubeV1(payable(proxy));
-        cube.initialize(NAME, SYMBOL, SIGNATURE_DOMAIN, SIGNING_VERSION);
+        cube.initialize(NAME, SYMBOL, SIGNATURE_DOMAIN, SIGNING_VERSION, _admin);
         vm.stopBroadcast();
         return address(proxy);
     }

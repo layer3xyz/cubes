@@ -14,6 +14,8 @@ contract DeployAndUpgradeTest is StdCheats, Test {
     DeployProxy public deployProxy;
     UpgradeCube public upgradeCube;
     address public OWNER = address(1);
+    address public ALICE = address(2);
+    address public BOB = address(3);
 
     // this address should always remain the same
     address public proxyAddress;

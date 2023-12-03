@@ -77,17 +77,6 @@ contract CubeV1 is
     );
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
 
-    /*
-        X% goes to referrer (if any)
-        X% goes to embed-integrator (if any)
-        X% goes to quest-creator (if any)
-    */
-    struct ReferralData {
-        address referrer;
-        uint256 BPS;
-        bytes32 data;
-    }
-
     struct CubeData {
         uint256 questId;
         uint256 userId;
@@ -101,6 +90,12 @@ contract CubeV1 is
         address toAddress;
         TransactionData[] transactions;
         ReferralData[] refs;
+    }
+
+    struct ReferralData {
+        address referrer;
+        uint256 BPS;
+        bytes32 data;
     }
 
     struct TransactionData {
@@ -117,7 +112,8 @@ contract CubeV1 is
         string memory _name,
         string memory _symbol,
         string memory _signingDomain,
-        string memory _signatureVersion
+        string memory _signatureVersion,
+        address _admin
     ) public initializer {
         __ERC721_init(_name, _symbol);
         __EIP712_init(_signingDomain, _signatureVersion);
@@ -126,9 +122,9 @@ contract CubeV1 is
         isMintingActive = true;
 
         // TODO: update these so they're not msg.sender?
-        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
-        _grantRole(SIGNER_ROLE, msg.sender);
-        _grantRole(UPGRADER_ROLE, msg.sender);
+        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
+        _grantRole(SIGNER_ROLE, _admin);
+        _grantRole(UPGRADER_ROLE, _admin);
     }
 
     function _authorizeUpgrade(address newImplementation)
@@ -164,8 +160,6 @@ contract CubeV1 is
         }
 
         emit QuestMetadata(questId, questType, difficulty, title);
-
-        delete questIssueNumbers[questId];
     }
 
     function _mintCube(CubeData calldata _data, bytes calldata signature) internal {
@@ -175,9 +169,9 @@ contract CubeV1 is
         // scope for signer, avoids stack too deep errors
         {
             address signer = _getSigner(_data, signature);
-            // if (!hasRole(SIGNER_ROLE, signer)) {
-            //     revert TestCUBE__IsNotSigner();
-            // }
+            if (!hasRole(SIGNER_ROLE, signer)) {
+                revert TestCUBE__IsNotSigner();
+            }
 
             bool isConsumedNonce = nonces[signer][_data.nonce];
             if (isConsumedNonce) {
@@ -207,11 +201,12 @@ contract CubeV1 is
 
         for (uint256 i = 0; i < _data.refs.length;) {
             uint256 referralAmount = _data.price * _data.refs[i].BPS / 10_000;
-            (bool success, bytes memory transferData) =
-                _data.refs[i].referrer.call{value: referralAmount}("");
-            console.logBytes(transferData);
+            (bool success,) = _data.refs[i].referrer.call{value: referralAmount}("");
             if (!success) {
                 revert TestCUBE___Transfer_Failed();
+            }
+            unchecked {
+                ++i;
             }
         }
         _safeMint(_data.toAddress, tokenId);
@@ -275,7 +270,7 @@ contract CubeV1 is
         return digest.recover(signature);
     }
 
-    function _computeDigest(CubeData calldata data) internal view returns (bytes32) {
+    function _computeDigest(CubeData calldata data) public view returns (bytes32) {
         bytes32 encodedTxs = _encodeCompletedTxs(data.transactions);
         bytes32 encodedTags = _encodeTags(data.tags);
         bytes32 encodedRefs = _encodeReferrals(data.refs);
