@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
-import {CubeV1} from "../../src/CubeV1.sol";
+import {CUBE} from "../../src/CUBE.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessagehashUtils.sol";
 
-contract SigUtils is CubeV1 {
+contract SigUtils is CUBE {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
@@ -48,28 +48,28 @@ contract SigUtils is CubeV1 {
     function getTestCubeData(address _referrer, address _mintTo)
         public
         pure
-        returns (CubeV1.CubeData memory)
+        returns (CUBE.CubeData memory)
     {
         string[] memory tags = new string[](1);
         tags[0] = "DeFi";
-        CubeV1.TransactionData[] memory transactions = new CubeV1.TransactionData[](1);
-        transactions[0] = CubeV1.TransactionData({
+        CUBE.TransactionData[] memory transactions = new CUBE.TransactionData[](1);
+        transactions[0] = CUBE.TransactionData({
             txHash: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002,
             chainId: 137
         });
 
-        CubeV1.ReferralData[] memory refs = new CubeV1.ReferralData[](1);
-        refs[0] = CubeV1.ReferralData({
+        CUBE.ReferralData[] memory refs = new CUBE.ReferralData[](1);
+        refs[0] = CUBE.ReferralData({
             referrer: _referrer,
             BPS: 500,
             data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
         });
-        return CubeV1.CubeData({
+        return CUBE.CubeData({
             questId: 1,
             userId: 1,
             completedAt: 6,
             nonce: 1,
-            price: 3,
+            price: 10 ether,
             walletProvider: "MetaMask",
             tokenURI: "ipfs://abc",
             embedOrigin: "test",

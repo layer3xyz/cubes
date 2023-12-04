@@ -11,10 +11,10 @@ import {Test, console} from "forge-std/Test.sol";
 import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {Handler} from "./Handler.t.sol";
 import {DeployProxy} from "../../script/DeployProxy.s.sol";
-import {CubeV1} from "../../src/CubeV1.sol";
+import {CUBE} from "../../src/CUBE.sol";
 
 contract Invariant is StdInvariant, Test {
-    CubeV1 cube;
+    CUBE cube;
     uint256 internal adminPrivateKey;
     address internal adminAddress;
     DeployProxy deployer;
@@ -26,7 +26,7 @@ contract Invariant is StdInvariant, Test {
 
         deployer = new DeployProxy();
         proxyAddress = deployer.deployProxy(adminAddress);
-        cube = CubeV1(payable(proxyAddress));
+        cube = CUBE(payable(proxyAddress));
         targetContract(address(cube));
     }
 

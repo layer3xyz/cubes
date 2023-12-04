@@ -2,7 +2,7 @@
 pragma solidity 0.8.20;
 
 import {Script} from "forge-std/Script.sol";
-import {CubeV1} from "../src/CubeV1.sol";
+import {CUBE} from "../src/CUBE.sol";
 import {CubeV2} from "../src/CubeV2.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {DevOpsTools} from "lib/foundry-devops/src/DevOpsTools.sol";
@@ -15,17 +15,12 @@ contract UpgradeCube is Script {
     uint256 public deployerKey;
     address public OWNER = address(0);
 
-    // function run(address _proxyAddress) external returns (address) {
-    //     address proxy = upgradeCube(OWNER, _proxyAddress, 55);
-    //     return proxy;
-    // }
-
     function upgradeCube(address _admin, address _proxyAddress, uint256 _newVal)
         public
         returns (address)
     {
         vm.startPrank(_admin);
-        CubeV1 proxy = CubeV1(payable(_proxyAddress));
+        CUBE proxy = CUBE(payable(_proxyAddress));
 
         Upgrades.upgradeProxy(
             _proxyAddress, "CubeV2.sol", abi.encodeCall(CubeV2.initializeV2, _newVal)
