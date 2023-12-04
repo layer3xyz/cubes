@@ -42,7 +42,7 @@ contract CUBE is
     error TestCUBE__SignatureAndCubesInputMismatch();
     error TestCUBE__WithdrawFailed();
     error TestCUBE__NonceAlreadyUsed();
-    error TestCUBE___TransferFailed();
+    error TestCUBE__TransferFailed();
     error TestCUBE__BPSTooHigh();
     error TestCUBE__ExcessiveReferralPayout();
 
@@ -79,7 +79,7 @@ contract CUBE is
 
     /// @notice Emitted when a new quest is initialized
     /// @param questId The unique identifier of the quest
-    /// @param questType The type of the quest (QUEST, STREAK, etc.)
+    /// @param questType The type of the quest (QUEST, STREAK)
     /// @param difficulty The difficulty level of the quest (BEGINNER, INTERMEDIATE, ADVANCED)
     /// @param title The title of the quest
     event QuestMetadata(
@@ -362,7 +362,7 @@ contract CUBE is
             if (referrer != address(0)) {
                 (bool success,) = referrer.call{value: referralAmount}("");
                 if (!success) {
-                    revert TestCUBE___TransferFailed();
+                    revert TestCUBE__TransferFailed();
                 }
                 emit ReferralPayout(referrer, referralAmount, _data.refs[i].data);
             }
