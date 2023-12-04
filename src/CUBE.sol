@@ -36,19 +36,19 @@ contract CUBE is
 {
     using ECDSA for bytes32;
 
-    error TestCUBE__IsNotSigner();
-    error TestCUBE__MintingIsNotActive();
-    error TestCUBE__FeeNotEnough();
-    error TestCUBE__SignatureAndCubesInputMismatch();
-    error TestCUBE__WithdrawFailed();
-    error TestCUBE__NonceAlreadyUsed();
-    error TestCUBE__TransferFailed();
-    error TestCUBE__BPSTooHigh();
-    error TestCUBE__ExcessiveReferralPayout();
+    error CUBE__IsNotSigner();
+    error CUBE__MintingIsNotActive();
+    error CUBE__FeeNotEnough();
+    error CUBE__SignatureAndCubesInputMismatch();
+    error CUBE__WithdrawFailed();
+    error CUBE__NonceAlreadyUsed();
+    error CUBE__TransferFailed();
+    error CUBE__BPSTooHigh();
+    error CUBE__ExcessiveReferralPayout();
+    error CUBE__ExceedsContractBalance();
 
     uint256 internal s_nextTokenId;
     uint256 internal s_questCompletionIdCounter;
-    uint16 constant MAX_BPS = 50_00;
     bool public s_isMintingActive;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER");
@@ -59,7 +59,7 @@ contract CUBE is
     bytes32 internal constant REF_DATA_HASH =
         keccak256("ReferralData(address payable referrer,uint16 BPS,bytes32 data)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string walletProvider,string tokenURI,string embedOrigin,string[] tags,address toAddress,TransactionData[] transactions,ReferralData[] refs)TransactionData(bytes32 txHash,uint256 chainId)ReferralData(address payable referrer,uint16 BPS,bytes32 data)"
+        "CubeData(uint256 questId,uint256 userId,uint256 nonce,uint256 price,uint64 completedAt,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,ReferralData[] refs)TransactionData(bytes32 txHash,uint256 chainId)ReferralData(address payable referrer,uint16 BPS,bytes32 data)"
     );
 
     mapping(uint256 => uint256) internal s_questIssueNumbers;
@@ -82,8 +82,13 @@ contract CUBE is
     /// @param questType The type of the quest (QUEST, STREAK)
     /// @param difficulty The difficulty level of the quest (BEGINNER, INTERMEDIATE, ADVANCED)
     /// @param title The title of the quest
+    /// @param tags An array of tags associated with the quest
     event QuestMetadata(
-        uint256 indexed questId, QuestType questType, Difficulty difficulty, string title
+        uint256 indexed questId,
+        QuestType questType,
+        Difficulty difficulty,
+        string title,
+        string[] tags
     );
 
     /// @notice Emitted when a community is associated with a quest
@@ -99,16 +104,14 @@ contract CUBE is
     /// @param completedAt The timestamp when the Cube was claimed
     /// @param walletProvider The name of the wallet provider used for claiming
     /// @param embedOrigin The origin of the embed associated with the Cube
-    /// @param tags An array of tags associated with the Cube
     event CubeClaim(
         uint256 indexed questId,
         uint256 indexed tokenId,
         uint256 issueNumber,
         uint256 userId,
-        uint256 completedAt,
+        uint64 completedAt,
         string walletProvider,
-        string embedOrigin,
-        string[] tags
+        string embedOrigin
     );
 
     /// @notice Emitted for each transaction associated with a Cube claim
@@ -126,14 +129,13 @@ contract CUBE is
     struct CubeData {
         uint256 questId;
         uint256 userId;
-        uint256 completedAt;
         uint256 nonce;
         uint256 price;
+        uint64 completedAt;
+        address toAddress;
         string walletProvider;
         string tokenURI;
         string embedOrigin;
-        string[] tags;
-        address toAddress;
         TransactionData[] transactions;
         ReferralData[] refs;
     }
@@ -227,7 +229,8 @@ contract CUBE is
         string[] memory communities,
         string memory title,
         Difficulty difficulty,
-        QuestType questType
+        QuestType questType,
+        string[] calldata tags
     ) external onlyRole(SIGNER_ROLE) {
         for (uint256 i = 0; i < communities.length;) {
             emit QuestCommunity(questId, communities[i]);
@@ -236,23 +239,23 @@ contract CUBE is
             }
         }
 
-        emit QuestMetadata(questId, questType, difficulty, title);
+        emit QuestMetadata(questId, questType, difficulty, title, tags);
     }
 
     /// @notice Mints multiple cubes based on provided data and signatures
     /// @dev Checks if minting is active, matches cube data with signatures, and processes each mint.
     /// @param cubeData Array of CubeData structures containing minting information
     /// @param signatures Array of signatures corresponding to each CubeData
-    function mintMultipleCubes(CubeData[] calldata cubeData, bytes[] calldata signatures)
+    function mintCubes(CubeData[] calldata cubeData, bytes[] calldata signatures)
         external
         payable
         nonReentrant
     {
         if (!s_isMintingActive) {
-            revert TestCUBE__MintingIsNotActive();
+            revert CUBE__MintingIsNotActive();
         }
         if (cubeData.length != signatures.length) {
-            revert TestCUBE__SignatureAndCubesInputMismatch();
+            revert CUBE__SignatureAndCubesInputMismatch();
         }
 
         uint256 totalFee;
@@ -264,7 +267,7 @@ contract CUBE is
         }
 
         if (msg.value < totalFee) {
-            revert TestCUBE__FeeNotEnough();
+            revert CUBE__FeeNotEnough();
         }
 
         for (uint256 i = 0; i < cubeData.length;) {
@@ -280,7 +283,7 @@ contract CUBE is
     function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
         (bool success,) = msg.sender.call{value: address(this).balance}("");
         if (!success) {
-            revert TestCUBE__WithdrawFailed();
+            revert CUBE__WithdrawFailed();
         }
     }
 
@@ -325,48 +328,50 @@ contract CUBE is
             _data.userId,
             _data.completedAt,
             _data.walletProvider,
-            _data.embedOrigin,
-            _data.tags
+            _data.embedOrigin
         );
     }
 
     function _validateSignature(CubeData calldata _data, bytes calldata _signature) internal {
         address signer = _getSigner(_data, _signature);
         if (!hasRole(SIGNER_ROLE, signer)) {
-            revert TestCUBE__IsNotSigner();
+            revert CUBE__IsNotSigner();
         }
 
         bool isConsumedNonce = s_nonces[_data.nonce];
         if (isConsumedNonce) {
-            revert TestCUBE__NonceAlreadyUsed();
+            revert CUBE__NonceAlreadyUsed();
         }
         s_nonces[_data.nonce] = true;
     }
 
     function _processReferrals(CubeData calldata _data) internal {
-        uint256 totalReferralAmount = 0;
+        uint256 totalReferralAmount;
+
+        // max basis points is 10k (100%)
+        uint16 maxBps = 10_000;
+        uint256 contractBalance = address(this).balance;
         for (uint256 i = 0; i < _data.refs.length;) {
-            if (_data.refs[i].BPS > MAX_BPS) {
-                revert TestCUBE__BPSTooHigh();
+            if (_data.refs[i].BPS > maxBps) {
+                revert CUBE__BPSTooHigh();
             }
 
-            uint256 referralAmount = (_data.price * _data.refs[i].BPS) / 10_000;
+            uint256 referralAmount = (_data.price * _data.refs[i].BPS) / maxBps;
             totalReferralAmount += referralAmount;
             if (totalReferralAmount > _data.price) {
-                revert TestCUBE__ExcessiveReferralPayout();
+                revert CUBE__ExcessiveReferralPayout();
             }
-            if (totalReferralAmount > address(this).balance) {
-                revert TestCUBE__ExcessiveReferralPayout();
+            if (totalReferralAmount > contractBalance) {
+                revert CUBE__ExceedsContractBalance();
             }
             address referrer = _data.refs[i].referrer;
             if (referrer != address(0)) {
                 (bool success,) = referrer.call{value: referralAmount}("");
                 if (!success) {
-                    revert TestCUBE__TransferFailed();
+                    revert CUBE__TransferFailed();
                 }
                 emit ReferralPayout(referrer, referralAmount, _data.refs[i].data);
             }
-
             unchecked {
                 ++i;
             }
@@ -391,14 +396,13 @@ contract CUBE is
             CUBE_DATA_HASH,
             _data.questId,
             _data.userId,
-            _data.completedAt,
             _data.nonce,
             _data.price,
+            _data.completedAt,
+            _data.toAddress,
             _encodeString(_data.walletProvider),
             _encodeString(_data.tokenURI),
             _encodeString(_data.embedOrigin),
-            _encodeTags(_data.tags),
-            _data.toAddress,
             _encodeCompletedTxs(_data.transactions),
             _encodeReferrals(_data.refs)
         );
@@ -442,18 +446,6 @@ contract CUBE is
         }
 
         return keccak256(abi.encodePacked(encodedRefs));
-    }
-
-    function _encodeTags(string[] calldata tags) internal pure returns (bytes32) {
-        bytes32[] memory encodedTxs = new bytes32[](tags.length);
-        for (uint256 i = 0; i < tags.length;) {
-            encodedTxs[i] = keccak256(abi.encodePacked(tags[i]));
-            unchecked {
-                ++i;
-            }
-        }
-
-        return keccak256(abi.encodePacked(encodedTxs));
     }
 
     /// @notice Checks if the contract implements an interface

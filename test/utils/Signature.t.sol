@@ -11,7 +11,6 @@ contract SigUtils is CUBE {
 
     function getStructHash(CubeData calldata data) public pure returns (bytes32) {
         bytes32 encodedTxs = _encodeCompletedTxs(data.transactions);
-        bytes32 encodedTags = _encodeTags(data.tags);
         bytes32 encodedRefs = _encodeReferrals(data.refs);
 
         return keccak256(
@@ -19,14 +18,13 @@ contract SigUtils is CUBE {
                 CUBE_DATA_HASH,
                 data.questId,
                 data.userId,
-                data.completedAt,
                 data.nonce,
                 data.price,
+                data.completedAt,
+                data.toAddress,
                 keccak256(bytes(data.walletProvider)),
                 keccak256(bytes(data.tokenURI)),
                 keccak256(bytes(data.embedOrigin)),
-                encodedTags,
-                data.toAddress,
                 encodedTxs,
                 encodedRefs
             )
@@ -50,8 +48,6 @@ contract SigUtils is CUBE {
         view
         returns (CUBE.CubeData memory)
     {
-        string[] memory tags = new string[](1);
-        tags[0] = "DeFi";
         CUBE.TransactionData[] memory transactions = new CUBE.TransactionData[](1);
         transactions[0] = CUBE.TransactionData({
             txHash: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002,
@@ -67,14 +63,13 @@ contract SigUtils is CUBE {
         return CUBE.CubeData({
             questId: 1,
             userId: 1,
-            completedAt: block.timestamp,
             nonce: 1,
             price: 10 ether,
+            completedAt: uint64(block.timestamp),
+            toAddress: _mintTo,
             walletProvider: "MetaMask",
             tokenURI: "ipfs://abc",
             embedOrigin: "test",
-            tags: tags,
-            toAddress: _mintTo,
             transactions: transactions,
             refs: refs
         });
