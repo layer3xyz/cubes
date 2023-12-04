@@ -1,4 +1,13 @@
 // SPDX-License-Identifier: MIT
+/*
+.____                             ________
+|    |   _____  ___.__. __________\_____  \
+|    |   \__  \<   |  |/ __ \_  __ \_(__  <
+|    |___ / __ \\___  \  ___/|  | \/       \
+|_______ (____  / ____|\___  >__| /______  /
+        \/    \/\/         \/            \/
+*/
+
 pragma solidity 0.8.20;
 
 import {EIP712Upgradeable} from
@@ -88,7 +97,7 @@ contract CUBE is
     /// @param issueNumber The issue number of the Cube
     /// @param userId The ID of the user who claimed the Cube
     /// @param completedAt The timestamp when the Cube was claimed
-    /// @param walletName The name of the wallet provider used for claiming
+    /// @param walletProvider The name of the wallet provider used for claiming
     /// @param embedOrigin The origin of the embed associated with the Cube
     /// @param tags An array of tags associated with the Cube
     event CubeClaim(
@@ -97,7 +106,7 @@ contract CUBE is
         uint256 issueNumber,
         uint256 userId,
         uint256 completedAt,
-        string walletName,
+        string walletProvider,
         string embedOrigin,
         string[] tags
     );
@@ -147,19 +156,19 @@ contract CUBE is
 
     /// @notice Initializes the CUBE contract with necessary parameters
     /// @dev Sets up the ERC721 token with given name and symbol, and grants initial roles.
-    /// @param _name Name of the NFT collection
-    /// @param _symbol Symbol of the NFT collection
+    /// @param _tokenName Name of the NFT collection
+    /// @param _tokenSymbol Symbol of the NFT collection
     /// @param _signingDomain Domain used for EIP712 signing
     /// @param _signatureVersion Version of the EIP712 signature
     /// @param _admin Address to be granted the admin roles
     function initialize(
-        string memory _name,
-        string memory _symbol,
+        string memory _tokenName,
+        string memory _tokenSymbol,
         string memory _signingDomain,
         string memory _signatureVersion,
         address _admin
     ) public initializer {
-        __ERC721_init(_name, _symbol);
+        __ERC721_init(_tokenName, _tokenSymbol);
         __EIP712_init(_signingDomain, _signatureVersion);
         __AccessControl_init();
         __UUPSUpgradeable_init();
@@ -341,7 +350,7 @@ contract CUBE is
                 revert TestCUBE__BPSTooHigh();
             }
 
-            uint256 referralAmount = _data.price * _data.refs[i].BPS / 10_000;
+            uint256 referralAmount = (_data.price * _data.refs[i].BPS) / 10_000;
             totalReferralAmount += referralAmount;
             if (totalReferralAmount > _data.price) {
                 revert TestCUBE__ExcessiveReferralPayout();
@@ -349,14 +358,15 @@ contract CUBE is
             if (totalReferralAmount > address(this).balance) {
                 revert TestCUBE__ExcessiveReferralPayout();
             }
-
             address referrer = _data.refs[i].referrer;
-            (bool success,) = referrer.call{value: referralAmount}("");
-            if (!success) {
-                revert TestCUBE___TransferFailed();
+            if (referrer != address(0)) {
+                (bool success,) = referrer.call{value: referralAmount}("");
+                if (!success) {
+                    revert TestCUBE___TransferFailed();
+                }
+                emit ReferralPayout(referrer, referralAmount, _data.refs[i].data);
             }
 
-            emit ReferralPayout(referrer, referralAmount, _data.refs[i].data);
             unchecked {
                 ++i;
             }

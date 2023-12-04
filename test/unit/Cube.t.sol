@@ -7,8 +7,6 @@ import {CUBE} from "../../src/CUBE.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessagehashUtils.sol";
 import {SigUtils} from "../utils/Signature.t.sol";
-import {EIP712Upgradeable} from
-    "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
 contract CubeTest is Test {
@@ -383,23 +381,29 @@ contract CubeTest is Test {
     function testReuseSignature() public {
         CUBE.CubeData memory data = sigUtils.getTestCubeData(ALICE, BOB);
         CUBE.CubeData memory data2 = sigUtils.getTestCubeData(BOB, ALICE);
+        data2.nonce = 3;
 
         bytes32 structHash = sigUtils.getStructHash(data);
         bytes32 digest = sigUtils.getDigest(getDomainSeparator(), structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
+        bytes32 structHash2 = sigUtils.getStructHash(data2);
+        bytes32 digest2 = sigUtils.getDigest(getDomainSeparator(), structHash2);
+        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(ownerPrivateKey, digest2);
+        bytes memory signature2 = abi.encodePacked(r2, s2, v2);
+
         bytes[] memory signatures = new bytes[](2);
         CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](2);
 
         signatures[0] = signature;
-        signatures[1] = signature; // use same signature
+        signatures[1] = signature2;
         cubeData[0] = data;
         cubeData[1] = data2;
 
-        hoax(adminAddress, 10 ether);
+        hoax(adminAddress, 20 ether);
         //vm.expectRevert(CUBE.TestCUBE__NonceAlreadyUsed.selector);
-        demoCube.mintMultipleCubes{value: 10 ether}(cubeData, signatures);
+        demoCube.mintMultipleCubes{value: 20 ether}(cubeData, signatures);
     }
 
     function testMultipleReferrers() public {

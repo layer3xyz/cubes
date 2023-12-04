@@ -47,7 +47,7 @@ contract SigUtils is CUBE {
 
     function getTestCubeData(address _referrer, address _mintTo)
         public
-        pure
+        view
         returns (CUBE.CubeData memory)
     {
         string[] memory tags = new string[](1);
@@ -67,7 +67,7 @@ contract SigUtils is CUBE {
         return CUBE.CubeData({
             questId: 1,
             userId: 1,
-            completedAt: 6,
+            completedAt: block.timestamp,
             nonce: 1,
             price: 10 ether,
             walletProvider: "MetaMask",

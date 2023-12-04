@@ -17,6 +17,7 @@ docs/
 
 # local tests
 coverage-report.txt
+bin/*
 
 node_modules
 

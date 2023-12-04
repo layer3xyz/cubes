@@ -6,14 +6,13 @@ remappings = [
   "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/", 
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/", 
   "erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests/", 
-  "@openzeppelin/contracts/=lib/openzeppelin-contracts-upgradeable/lib/openzeppelin-contracts/contracts/", 
-  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+  "openzeppelin-foundry-upgrades/=lib/openzeppelin-foundry-upgrades/src/"
 ]
 solc_version = "0.8.20"
 optimizer = true
 optimizer_runs = 10000
 # NOTE: doesn't work with `forge coverage`
-#viaIR = true
+viaIR = true
 build_info = true
 extra_output = ["storageLayout"]
 

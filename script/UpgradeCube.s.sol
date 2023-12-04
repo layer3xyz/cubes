@@ -4,7 +4,6 @@ pragma solidity 0.8.20;
 import {Script} from "forge-std/Script.sol";
 import {CUBE} from "../src/CUBE.sol";
 import {CubeV2} from "../src/CubeV2.sol";
-import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {DevOpsTools} from "lib/foundry-devops/src/DevOpsTools.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
