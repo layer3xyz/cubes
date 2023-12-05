@@ -21,7 +21,7 @@ deploy:
 	@forge script script/DeployCube.s.sol:DeployCube $(NETWORK_ARGS)
 
 deploy_proxy:
-	@forge script script/DeployProxy.s.sol:DeployProxy $(NETWORK_ARGS)
+	@forge script script/DeployProxy.s.sol:DeployProxy $(NETWORK_ARGS) --ffi
 
 fork_test:
 	@forge test --rpc-url $(RPC_ENDPOINT) -vvv

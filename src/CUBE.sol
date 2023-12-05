@@ -57,9 +57,9 @@ contract CUBE is
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
     bytes32 internal constant REF_DATA_HASH =
-        keccak256("ReferralData(address payable referrer,uint16 BPS,bytes32 data)");
+        keccak256("ReferralData(address referrer,uint16 BPS,bytes32 data)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 nonce,uint256 price,uint64 completedAt,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,ReferralData[] refs)TransactionData(bytes32 txHash,uint256 chainId)ReferralData(address payable referrer,uint16 BPS,bytes32 data)"
+        "CubeData(uint256 questId,uint256 userId,uint256 nonce,uint256 price,uint64 completedAt,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,ReferralData[] refs)ReferralData(address referrer,uint16 BPS,bytes32 data)TransactionData(bytes32 txHash,uint256 chainId)"
     );
 
     mapping(uint256 => uint256) internal s_questIssueNumbers;
@@ -308,7 +308,6 @@ contract CUBE is
         }
 
         s_tokenURIs[tokenId] = _data.tokenURI;
-        s_nonces[_data.nonce] = true;
 
         unchecked {
             ++s_questCompletionIdCounter;
@@ -337,9 +336,7 @@ contract CUBE is
         if (!hasRole(SIGNER_ROLE, signer)) {
             revert CUBE__IsNotSigner();
         }
-
-        bool isConsumedNonce = s_nonces[_data.nonce];
-        if (isConsumedNonce) {
+        if (s_nonces[_data.nonce]) {
             revert CUBE__NonceAlreadyUsed();
         }
         s_nonces[_data.nonce] = true;
