@@ -2,15 +2,34 @@
 src = "src"
 out = "out"
 libs = ["lib"]
-remappings = ["@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/", "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/", 
-  "erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests/"]
-solc_version="0.8.20"
+remappings = [
+  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/", 
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/", 
+  "erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests/", 
+  "openzeppelin-foundry-upgrades/=lib/openzeppelin-foundry-upgrades/src/"
+]
+solc_version = "0.8.20"
 optimizer = true
-optimizer_runs=10000
-viaIR = true
+optimizer_runs = 10000
+# NOTE: doesn't work with `forge coverage`
+#viaIR = true
+build_info = true
+extra_output = ["storageLayout"]
+
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 [fmt]
 line_length = 100
 
 
+# stateless fuzz
+#[fuzz]
+#runs = 500
+
+# stateful fuzz
+#[invariant]
+#runs = 150
+#depth = 50
+#fail_on_revert = true
+
+gas_reports = ["CUBE"]
