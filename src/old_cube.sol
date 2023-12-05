@@ -1,54 +1,30 @@
 // SPDX-License-Identifier: MIT
-/*
-.____                             ________
-|    |   _____  ___.__. __________\_____  \
-|    |   \__  \<   |  |/ __ \_  __ \_(__  <
-|    |___ / __ \\___  \  ___/|  | \/       \
-|_______ (____  / ____|\___  >__| /______  /
-        \/    \/\/         \/            \/
-*/
-
 pragma solidity 0.8.20;
 
-import {EIP712Upgradeable} from
-    "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
+import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
-import {ERC721Upgradeable} from
-    "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
-import {AccessControlUpgradeable} from
-    "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
-import {ReentrancyGuardUpgradeable} from
-    "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
+import {EIP712} from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-/// @title CUBE
-/// @dev Implementation of an NFT smart contract with EIP712 signatures.
-/// The contract is upgradeable using OpenZeppelin's UUPSUpgradeable pattern.
-contract CUBE is
-    Initializable,
-    ERC721Upgradeable,
-    AccessControlUpgradeable,
-    UUPSUpgradeable,
-    EIP712Upgradeable,
-    ReentrancyGuardUpgradeable
-{
+contract DemoCube2 is ERC721, AccessControl, EIP712, ReentrancyGuard {
     using ECDSA for bytes32;
 
-    error CUBE__IsNotSigner();
-    error CUBE__MintingIsNotActive();
-    error CUBE__FeeNotEnough();
-    error CUBE__SignatureAndCubesInputMismatch();
-    error CUBE__WithdrawFailed();
-    error CUBE__NonceAlreadyUsed();
-    error CUBE__TransferFailed();
-    error CUBE__BPSTooHigh();
-    error CUBE__ExcessiveReferralPayout();
-    error CUBE__ExceedsContractBalance();
+    error TestCUBE__IsNotSigner();
+    error TestCUBE__MintingIsNotActive();
+    error TestCUBE__FeeNotEnough();
+    error TestCUBE__SignatureAndCubesInputMismatch();
+    error TestCUBE__WithdrawFailed();
+    error TestCUBE__NonceAlreadyUsed();
+    error TestCUBE___TransferFailed();
+    error TestCUBE__BPSTooHigh();
+    error TestCUBE__ExcessiveReferralPayout();
 
     uint256 internal s_nextTokenId;
     uint256 internal s_questCompletionIdCounter;
+    uint16 constant MAX_BPS = 50_00;
     bool public s_isMintingActive;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER");
@@ -57,9 +33,9 @@ contract CUBE is
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
     bytes32 internal constant REF_DATA_HASH =
-        keccak256("ReferralData(address referrer,uint16 BPS,bytes32 data)");
+        keccak256("ReferralData(address payable referrer,uint16 BPS,bytes32 data)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 nonce,uint256 price,uint64 completedAt,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,ReferralData[] refs)ReferralData(address referrer,uint16 BPS,bytes32 data)TransactionData(bytes32 txHash,uint256 chainId)"
+        "CubeData(uint256 questId,uint256 userId,uint256 completedAt,uint256 nonce,uint256 price,string tokenURI,string[] tags,address toAddress,TransactionData[] transactions,ReferralData[] refs)TransactionData(bytes32 txHash,uint256 chainId)ReferralData(address payable referrer,uint16 BPS,bytes32 data)"
     );
 
     mapping(uint256 => uint256) internal s_questIssueNumbers;
@@ -79,16 +55,11 @@ contract CUBE is
 
     /// @notice Emitted when a new quest is initialized
     /// @param questId The unique identifier of the quest
-    /// @param questType The type of the quest (QUEST, STREAK)
+    /// @param questType The type of the quest (QUEST, STREAK, etc.)
     /// @param difficulty The difficulty level of the quest (BEGINNER, INTERMEDIATE, ADVANCED)
     /// @param title The title of the quest
-    /// @param tags An array of tags associated with the quest
     event QuestMetadata(
-        uint256 indexed questId,
-        QuestType questType,
-        Difficulty difficulty,
-        string title,
-        string[] tags
+        uint256 indexed questId, QuestType questType, Difficulty difficulty, string title
     );
 
     /// @notice Emitted when a community is associated with a quest
@@ -102,16 +73,14 @@ contract CUBE is
     /// @param issueNumber The issue number of the Cube
     /// @param userId The ID of the user who claimed the Cube
     /// @param completedAt The timestamp when the Cube was claimed
-    /// @param walletProvider The name of the wallet provider used for claiming
-    /// @param embedOrigin The origin of the embed associated with the Cube
+    /// @param tags An array of tags associated with the Cube
     event CubeClaim(
         uint256 indexed questId,
         uint256 indexed tokenId,
         uint256 issueNumber,
         uint256 userId,
-        uint64 completedAt,
-        string walletProvider,
-        string embedOrigin
+        uint256 completedAt,
+        string[] tags
     );
 
     /// @notice Emitted for each transaction associated with a Cube claim
@@ -129,13 +98,14 @@ contract CUBE is
     struct CubeData {
         uint256 questId;
         uint256 userId;
+        uint256 completedAt;
         uint256 nonce;
         uint256 price;
-        uint64 completedAt;
-        address toAddress;
-        string walletProvider;
+        //string walletProvider;
         string tokenURI;
-        string embedOrigin;
+        //string embedOrigin;
+        string[] tags;
+        address toAddress;
         TransactionData[] transactions;
         ReferralData[] refs;
     }
@@ -151,45 +121,20 @@ contract CUBE is
         uint256 chainId;
     }
 
-    /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
-        _disableInitializers();
-    }
-
-    /// @notice Initializes the CUBE contract with necessary parameters
-    /// @dev Sets up the ERC721 token with given name and symbol, and grants initial roles.
-    /// @param _tokenName Name of the NFT collection
-    /// @param _tokenSymbol Symbol of the NFT collection
-    /// @param _signingDomain Domain used for EIP712 signing
-    /// @param _signatureVersion Version of the EIP712 signature
-    /// @param _admin Address to be granted the admin roles
-    function initialize(
+    constructor(
         string memory _tokenName,
         string memory _tokenSymbol,
         string memory _signingDomain,
-        string memory _signatureVersion,
-        address _admin
-    ) public initializer {
-        __ERC721_init(_tokenName, _tokenSymbol);
-        __EIP712_init(_signingDomain, _signatureVersion);
-        __AccessControl_init();
-        __UUPSUpgradeable_init();
-        __ReentrancyGuard_init();
-        s_isMintingActive = true;
-
-        _grantRole(DEFAULT_ADMIN_ROLE, _admin);
-        _grantRole(SIGNER_ROLE, _admin);
-        _grantRole(UPGRADER_ROLE, _admin);
+        string memory _signatureVersion
+    )
+        EIP712(_signingDomain, _signatureVersion)
+        ERC721(_tokenName, _tokenSymbol)
+        ReentrancyGuard()
+    {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(SIGNER_ROLE, msg.sender);
+        _grantRole(UPGRADER_ROLE, msg.sender);
     }
-
-    /// @notice Authorizes an upgrade to a new contract implementation
-    /// @dev Overrides the UUPSUpgradeable internal function with access control.
-    /// @param newImplementation Address of the new contract implementation
-    function _authorizeUpgrade(address newImplementation)
-        internal
-        override
-        onlyRole(UPGRADER_ROLE)
-    {}
 
     /// @notice Sets the URI for a given token
     /// @dev Can only be called by an account with the default admin role.
@@ -229,8 +174,7 @@ contract CUBE is
         string[] memory communities,
         string memory title,
         Difficulty difficulty,
-        QuestType questType,
-        string[] calldata tags
+        QuestType questType
     ) external onlyRole(SIGNER_ROLE) {
         for (uint256 i = 0; i < communities.length;) {
             emit QuestCommunity(questId, communities[i]);
@@ -239,35 +183,35 @@ contract CUBE is
             }
         }
 
-        emit QuestMetadata(questId, questType, difficulty, title, tags);
+        emit QuestMetadata(questId, questType, difficulty, title);
     }
 
     /// @notice Mints multiple cubes based on provided data and signatures
     /// @dev Checks if minting is active, matches cube data with signatures, and processes each mint.
     /// @param cubeData Array of CubeData structures containing minting information
     /// @param signatures Array of signatures corresponding to each CubeData
-    function mintCubes(CubeData[] calldata cubeData, bytes[] calldata signatures)
+    function mintMultipleCubes(CubeData[] calldata cubeData, bytes[] calldata signatures)
         external
         payable
         nonReentrant
     {
         if (!s_isMintingActive) {
-            revert CUBE__MintingIsNotActive();
+            revert TestCUBE__MintingIsNotActive();
         }
         if (cubeData.length != signatures.length) {
-            revert CUBE__SignatureAndCubesInputMismatch();
+            revert TestCUBE__SignatureAndCubesInputMismatch();
         }
 
         uint256 totalFee;
         for (uint256 i = 0; i < cubeData.length;) {
-            totalFee = totalFee + cubeData[i].price;
+            totalFee += cubeData[i].price;
             unchecked {
                 ++i;
             }
         }
 
         if (msg.value < totalFee) {
-            revert CUBE__FeeNotEnough();
+            revert TestCUBE__FeeNotEnough();
         }
 
         for (uint256 i = 0; i < cubeData.length;) {
@@ -283,7 +227,7 @@ contract CUBE is
     function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
         (bool success,) = msg.sender.call{value: address(this).balance}("");
         if (!success) {
-            revert CUBE__WithdrawFailed();
+            revert TestCUBE__WithdrawFailed();
         }
     }
 
@@ -308,6 +252,7 @@ contract CUBE is
         }
 
         s_tokenURIs[tokenId] = _data.tokenURI;
+        s_nonces[_data.nonce] = true;
 
         unchecked {
             ++s_questCompletionIdCounter;
@@ -326,49 +271,47 @@ contract CUBE is
             s_questIssueNumbers[_data.questId],
             _data.userId,
             _data.completedAt,
-            _data.walletProvider,
-            _data.embedOrigin
+            _data.tags
         );
     }
 
     function _validateSignature(CubeData calldata _data, bytes calldata _signature) internal {
         address signer = _getSigner(_data, _signature);
         if (!hasRole(SIGNER_ROLE, signer)) {
-            revert CUBE__IsNotSigner();
+            revert TestCUBE__IsNotSigner();
         }
-        if (s_nonces[_data.nonce]) {
-            revert CUBE__NonceAlreadyUsed();
+
+        bool isConsumedNonce = s_nonces[_data.nonce];
+        if (isConsumedNonce) {
+            revert TestCUBE__NonceAlreadyUsed();
         }
         s_nonces[_data.nonce] = true;
     }
 
     function _processReferrals(CubeData calldata _data) internal {
-        uint256 totalReferralAmount;
-
-        // max basis points is 10k (100%)
-        uint16 maxBps = 10_000;
-        uint256 contractBalance = address(this).balance;
+        uint256 totalReferralAmount = 0;
         for (uint256 i = 0; i < _data.refs.length;) {
-            if (_data.refs[i].BPS > maxBps) {
-                revert CUBE__BPSTooHigh();
+            if (_data.refs[i].BPS > MAX_BPS) {
+                revert TestCUBE__BPSTooHigh();
             }
 
-            uint256 referralAmount = (_data.price * _data.refs[i].BPS) / maxBps;
+            uint256 referralAmount = (_data.refs[i].BPS * _data.price) / 10_000;
             totalReferralAmount += referralAmount;
             if (totalReferralAmount > _data.price) {
-                revert CUBE__ExcessiveReferralPayout();
+                revert TestCUBE__ExcessiveReferralPayout();
             }
-            if (totalReferralAmount > contractBalance) {
-                revert CUBE__ExceedsContractBalance();
+            if (totalReferralAmount > address(this).balance) {
+                revert TestCUBE__ExcessiveReferralPayout();
             }
             address referrer = _data.refs[i].referrer;
             if (referrer != address(0)) {
                 (bool success,) = referrer.call{value: referralAmount}("");
                 if (!success) {
-                    revert CUBE__TransferFailed();
+                    revert TestCUBE___TransferFailed();
                 }
                 emit ReferralPayout(referrer, referralAmount, _data.refs[i].data);
             }
+
             unchecked {
                 ++i;
             }
@@ -393,13 +336,14 @@ contract CUBE is
             CUBE_DATA_HASH,
             _data.questId,
             _data.userId,
+            _data.completedAt,
             _data.nonce,
             _data.price,
-            _data.completedAt,
-            _data.toAddress,
-            _encodeString(_data.walletProvider),
+            //_encodeString(_data.walletProvider),
             _encodeString(_data.tokenURI),
-            _encodeString(_data.embedOrigin),
+            //_encodeString(_data.embedOrigin),
+            _encodeTags(_data.tags),
+            _data.toAddress,
             _encodeCompletedTxs(_data.transactions),
             _encodeReferrals(_data.refs)
         );
@@ -445,6 +389,18 @@ contract CUBE is
         return keccak256(abi.encodePacked(encodedRefs));
     }
 
+    function _encodeTags(string[] calldata tags) internal pure returns (bytes32) {
+        bytes32[] memory encodedTxs = new bytes32[](tags.length);
+        for (uint256 i = 0; i < tags.length;) {
+            encodedTxs[i] = keccak256(abi.encodePacked(tags[i]));
+            unchecked {
+                ++i;
+            }
+        }
+
+        return keccak256(abi.encodePacked(encodedTxs));
+    }
+
     /// @notice Checks if the contract implements an interface
     /// @dev Overrides the supportsInterface function of ERC721Upgradeable and AccessControlUpgradeable.
     /// @param interfaceId The interface identifier, as specified in ERC-165
@@ -452,7 +408,7 @@ contract CUBE is
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(ERC721Upgradeable, AccessControlUpgradeable)
+        override(ERC721, AccessControl)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);
