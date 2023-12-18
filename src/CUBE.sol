@@ -310,7 +310,7 @@ contract CUBE is
         }
 
         if (_data.recipients.length > 0) {
-            _processReferrals(_data);
+            _processPayouts(_data);
         }
         _safeMint(_data.toAddress, tokenId);
 
@@ -335,8 +335,8 @@ contract CUBE is
         s_nonces[_data.nonce] = true;
     }
 
-    function _processReferrals(CubeData calldata _data) internal {
-        uint256 totalReferralAmount;
+    function _processPayouts(CubeData calldata _data) internal {
+        uint256 totalAmount;
 
         // max basis points is 10k (100%)
         uint16 maxBps = 10_000;
@@ -347,20 +347,20 @@ contract CUBE is
             }
 
             uint256 referralAmount = (_data.price * _data.recipients[i].BPS) / maxBps;
-            totalReferralAmount += referralAmount;
-            if (totalReferralAmount > _data.price) {
+            totalAmount += referralAmount;
+            if (totalAmount > _data.price) {
                 revert CUBE__ExcessiveFeePayout();
             }
-            if (totalReferralAmount > contractBalance) {
+            if (totalAmount > contractBalance) {
                 revert CUBE__ExceedsContractBalance();
             }
-            address referrer = _data.recipients[i].recipient;
-            if (referrer != address(0)) {
-                (bool success,) = referrer.call{value: referralAmount}("");
+            address recipient = _data.recipients[i].recipient;
+            if (recipient != address(0)) {
+                (bool success,) = recipient.call{value: referralAmount}("");
                 if (!success) {
                     revert CUBE__TransferFailed();
                 }
-                emit FeePayout(referrer, referralAmount);
+                emit FeePayout(recipient, referralAmount);
             }
             unchecked {
                 ++i;
