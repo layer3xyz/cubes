@@ -347,7 +347,7 @@ contract CUBE is
             }
 
             uint256 referralAmount = (_data.price * _data.recipients[i].BPS) / maxBps;
-            totalAmount += referralAmount;
+            totalAmount = totalAmount + referralAmount;
             if (totalAmount > _data.price) {
                 revert CUBE__ExcessiveFeePayout();
             }
