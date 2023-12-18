@@ -7,7 +7,7 @@ import {CUBE} from "./CUBE.sol";
 contract CubeV2 is CUBE {
     uint256 public newValueV2;
 
-    function initializeV2(uint256 _newVal) public reinitializer(2) {
+    function initializeV2(uint256 _newVal) external reinitializer(2) {
         newValueV2 = _newVal;
     }
 }

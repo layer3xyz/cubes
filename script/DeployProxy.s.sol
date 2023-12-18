@@ -11,8 +11,8 @@ contract DeployProxy is Script {
         0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
     uint256 public deployerKey;
 
-    string public constant NAME = "DemoCUBE";
-    string public constant SYMBOL = "TCUBE";
+    string public constant NAME = "Layer3 CUBE";
+    string public constant SYMBOL = "CUBE";
     string public constant SIGNATURE_DOMAIN = "LAYER3";
     string public constant SIGNING_VERSION = "1";
 

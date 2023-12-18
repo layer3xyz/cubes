@@ -32,4 +32,4 @@ line_length = 100
 #depth = 50
 #fail_on_revert = true
 
-gas_reports = ["CUBE"]
+gas_reports = ["*"]

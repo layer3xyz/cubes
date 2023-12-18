@@ -44,7 +44,7 @@ contract CUBE is
     error CUBE__NonceAlreadyUsed();
     error CUBE__TransferFailed();
     error CUBE__BPSTooHigh();
-    error CUBE__ExcessiveReferralPayout();
+    error CUBE__ExcessiveFeePayout();
     error CUBE__ExceedsContractBalance();
 
     uint256 internal s_nextTokenId;
@@ -56,10 +56,10 @@ contract CUBE is
 
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
-    bytes32 internal constant REF_DATA_HASH =
-        keccak256("ReferralData(address referrer,uint16 BPS,bytes32 data)");
+    bytes32 internal constant RECIPIENT_DATA_HASH =
+        keccak256("FeeRecipient(address recipient,uint16 BPS)");
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 nonce,uint256 price,uint64 completedAt,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,ReferralData[] refs)ReferralData(address referrer,uint16 BPS,bytes32 data)TransactionData(bytes32 txHash,uint256 chainId)"
+        "CubeData(uint256 questId,uint256 userId,uint256 nonce,uint256 price,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients)FeeRecipient(address recipient,uint16 BPS)TransactionData(bytes32 txHash,uint256 chainId)"
     );
 
     mapping(uint256 => uint256) internal s_questIssueNumbers;
@@ -101,7 +101,6 @@ contract CUBE is
     /// @param tokenId The token ID of the minted Cube
     /// @param issueNumber The issue number of the Cube
     /// @param userId The ID of the user who claimed the Cube
-    /// @param completedAt The timestamp when the Cube was claimed
     /// @param walletProvider The name of the wallet provider used for claiming
     /// @param embedOrigin The origin of the embed associated with the Cube
     event CubeClaim(
@@ -109,7 +108,6 @@ contract CUBE is
         uint256 indexed tokenId,
         uint256 issueNumber,
         uint256 userId,
-        uint64 completedAt,
         string walletProvider,
         string embedOrigin
     );
@@ -120,30 +118,35 @@ contract CUBE is
     /// @param chainId The blockchain chain ID of the transaction
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
 
-    /// @notice Emitted when a referral payout is made
-    /// @param referrer The address of the referrer receiving the payout
-    /// @param amount The amount of the referral payout
-    /// @param data Additional data associated with the referral
-    event ReferralPayout(address indexed referrer, uint256 amount, bytes32 data);
+    /// @notice Emitted when a fee payout is made
+    /// @param recipient The address of the payout recipient
+    /// @param amount The amount of the payout
+    event FeePayout(address indexed recipient, uint256 amount);
+
+    /// @notice Emitted when the minting switch is turned on/off
+    /// @param isActive The boolean showing if the minting is active or not
+    event MintingSwitch(bool isActive);
+
+    /// @notice Emitted when the contract balance is withdrawn by an admin
+    /// @param amount The contract's balance that was withdrawn
+    event ContractWithdrawal(uint256 amount);
 
     struct CubeData {
         uint256 questId;
         uint256 userId;
         uint256 nonce;
         uint256 price;
-        uint64 completedAt;
         address toAddress;
         string walletProvider;
         string tokenURI;
         string embedOrigin;
         TransactionData[] transactions;
-        ReferralData[] refs;
+        FeeRecipient[] recipients;
     }
 
-    struct ReferralData {
-        address referrer;
+    struct FeeRecipient {
+        address recipient;
         uint16 BPS;
-        bytes32 data;
     }
 
     struct TransactionData {
@@ -191,17 +194,6 @@ contract CUBE is
         onlyRole(UPGRADER_ROLE)
     {}
 
-    /// @notice Sets the URI for a given token
-    /// @dev Can only be called by an account with the default admin role.
-    /// @param _tokenId The ID of the token
-    /// @param _uri The URI to be set for the token
-    function setTokenURI(uint256 _tokenId, string memory _uri)
-        external
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
-        s_tokenURIs[_tokenId] = _uri;
-    }
-
     /// @notice Retrieves the URI for a given token
     /// @dev Overrides the ERC721Upgradeable's tokenURI method.
     /// @param _tokenId The ID of the token
@@ -215,6 +207,7 @@ contract CUBE is
     /// @param _isMintingActive Boolean indicating whether minting should be active
     function setIsMintingActive(bool _isMintingActive) external onlyRole(DEFAULT_ADMIN_ROLE) {
         s_isMintingActive = _isMintingActive;
+        emit MintingSwitch(_isMintingActive);
     }
 
     /// @notice Initializes a new quest with given parameters
@@ -285,6 +278,7 @@ contract CUBE is
         if (!success) {
             revert CUBE__WithdrawFailed();
         }
+        emit ContractWithdrawal(address(this).balance);
     }
 
     /// @notice Internal function to handle the logic of minting a single cube
@@ -315,7 +309,7 @@ contract CUBE is
             ++s_nextTokenId;
         }
 
-        if (_data.refs.length > 0) {
+        if (_data.recipients.length > 0) {
             _processReferrals(_data);
         }
         _safeMint(_data.toAddress, tokenId);
@@ -325,7 +319,6 @@ contract CUBE is
             tokenId,
             s_questIssueNumbers[_data.questId],
             _data.userId,
-            _data.completedAt,
             _data.walletProvider,
             _data.embedOrigin
         );
@@ -348,26 +341,26 @@ contract CUBE is
         // max basis points is 10k (100%)
         uint16 maxBps = 10_000;
         uint256 contractBalance = address(this).balance;
-        for (uint256 i = 0; i < _data.refs.length;) {
-            if (_data.refs[i].BPS > maxBps) {
+        for (uint256 i = 0; i < _data.recipients.length;) {
+            if (_data.recipients[i].BPS > maxBps) {
                 revert CUBE__BPSTooHigh();
             }
 
-            uint256 referralAmount = (_data.price * _data.refs[i].BPS) / maxBps;
+            uint256 referralAmount = (_data.price * _data.recipients[i].BPS) / maxBps;
             totalReferralAmount += referralAmount;
             if (totalReferralAmount > _data.price) {
-                revert CUBE__ExcessiveReferralPayout();
+                revert CUBE__ExcessiveFeePayout();
             }
             if (totalReferralAmount > contractBalance) {
                 revert CUBE__ExceedsContractBalance();
             }
-            address referrer = _data.refs[i].referrer;
+            address referrer = _data.recipients[i].recipient;
             if (referrer != address(0)) {
                 (bool success,) = referrer.call{value: referralAmount}("");
                 if (!success) {
                     revert CUBE__TransferFailed();
                 }
-                emit ReferralPayout(referrer, referralAmount, _data.refs[i].data);
+                emit FeePayout(referrer, referralAmount);
             }
             unchecked {
                 ++i;
@@ -375,13 +368,13 @@ contract CUBE is
         }
     }
 
-    function _getSigner(CubeData calldata data, bytes calldata signature)
+    function _getSigner(CubeData calldata _data, bytes calldata _sig)
         internal
         view
         returns (address)
     {
-        bytes32 digest = _computeDigest(data);
-        return digest.recover(signature);
+        bytes32 digest = _computeDigest(_data);
+        return digest.recover(_sig);
     }
 
     function _computeDigest(CubeData calldata _data) internal view returns (bytes32) {
@@ -395,13 +388,12 @@ contract CUBE is
             _data.userId,
             _data.nonce,
             _data.price,
-            _data.completedAt,
             _data.toAddress,
             _encodeString(_data.walletProvider),
             _encodeString(_data.tokenURI),
             _encodeString(_data.embedOrigin),
             _encodeCompletedTxs(_data.transactions),
-            _encodeReferrals(_data.refs)
+            _encodeReferrals(_data.recipients)
         );
     }
 
@@ -429,20 +421,20 @@ contract CUBE is
         return keccak256(abi.encodePacked(encodedTxs));
     }
 
-    function _encodeRef(ReferralData calldata ref) internal pure returns (bytes memory) {
-        return abi.encode(REF_DATA_HASH, ref.referrer, ref.BPS, ref.data);
+    function _encodeRecipient(FeeRecipient calldata data) internal pure returns (bytes memory) {
+        return abi.encode(RECIPIENT_DATA_HASH, data.recipient, data.BPS);
     }
 
-    function _encodeReferrals(ReferralData[] calldata refData) internal pure returns (bytes32) {
-        bytes32[] memory encodedRefs = new bytes32[](refData.length);
-        for (uint256 i = 0; i < refData.length;) {
-            encodedRefs[i] = keccak256(_encodeRef(refData[i]));
+    function _encodeReferrals(FeeRecipient[] calldata data) internal pure returns (bytes32) {
+        bytes32[] memory encodedRecipients = new bytes32[](data.length);
+        for (uint256 i = 0; i < data.length;) {
+            encodedRecipients[i] = keccak256(_encodeRecipient(data[i]));
             unchecked {
                 ++i;
             }
         }
 
-        return keccak256(abi.encodePacked(encodedRefs));
+        return keccak256(abi.encodePacked(encodedRecipients));
     }
 
     /// @notice Checks if the contract implements an interface
@@ -457,6 +449,4 @@ contract CUBE is
     {
         return super.supportsInterface(interfaceId);
     }
-
-    receive() external payable {}
 }

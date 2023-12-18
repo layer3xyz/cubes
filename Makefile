@@ -13,9 +13,8 @@ NETWORK_ARGS := --rpc-url http://localhost:8545 --private-key $(DEFAULT_ANVIL_PR
 MUMBAI_RPC_ENDPOINT := https://polygon-mumbai.g.alchemy.com/v2/fb3CvnodOHZmfiAE8TGIzq9N83Tx24Va
 
 ifeq ($(findstring --network goerli,$(ARGS)),--network goerli)
-	NETWORK_ARGS := --rpc-url $(RPC_ENDPOINT) --private-key $(PRIVATE_KEY) --broadcast -vvvv
+	NETWORK_ARGS := --rpc-url $(RPC_ENDPOINT) --private-key $(PRIVATE_KEY) --verify --etherscan-api-key $(ETHERSCAN_API_KEY) --broadcast -vvvv
 endif
-# when contract is ready, add `--verify --etherscan-api-key $(ETHERSCAN_API_KEY)`
 
 deploy:
 	@forge script script/DeployCube.s.sol:DeployCube $(NETWORK_ARGS)
