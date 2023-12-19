@@ -11,7 +11,7 @@ contract SigUtils is CUBE {
 
     function getStructHash(CubeData calldata data) public pure returns (bytes32) {
         bytes32 encodedTxs = _encodeCompletedTxs(data.transactions);
-        bytes32 encodedRefs = _encodeReferrals(data.refs);
+        bytes32 encodedRefs = _encodeReferrals(data.recipients);
 
         return keccak256(
             abi.encode(
@@ -20,7 +20,6 @@ contract SigUtils is CUBE {
                 data.userId,
                 data.nonce,
                 data.price,
-                data.completedAt,
                 data.toAddress,
                 keccak256(bytes(data.walletProvider)),
                 keccak256(bytes(data.tokenURI)),
@@ -43,9 +42,9 @@ contract SigUtils is CUBE {
         return MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
     }
 
-    function getTestCubeData(address _referrer, address _mintTo)
+    function getTestCubeData(address _feeRecipient, address _mintTo)
         public
-        view
+        pure
         returns (CUBE.CubeData memory)
     {
         CUBE.TransactionData[] memory transactions = new CUBE.TransactionData[](1);
@@ -54,24 +53,19 @@ contract SigUtils is CUBE {
             chainId: 137
         });
 
-        CUBE.ReferralData[] memory refs = new CUBE.ReferralData[](1);
-        refs[0] = CUBE.ReferralData({
-            referrer: _referrer,
-            BPS: 500,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
+        CUBE.FeeRecipient[] memory recipients = new CUBE.FeeRecipient[](1);
+        recipients[0] = CUBE.FeeRecipient({recipient: _feeRecipient, BPS: 3300}); // 33%
         return CUBE.CubeData({
             questId: 1,
             userId: 1,
             nonce: 1,
             price: 10 ether,
-            completedAt: uint64(block.timestamp),
             toAddress: _mintTo,
             walletProvider: "MetaMask",
             tokenURI: "ipfs://abc",
             embedOrigin: "test",
             transactions: transactions,
-            refs: refs
+            recipients: recipients
         });
     }
 }

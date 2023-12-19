@@ -34,7 +34,7 @@ contract CubeTest is Test {
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
 
     DeployProxy public deployer;
-    CUBE public demoCube;
+    CUBE public cubeContract;
 
     string constant SIGNATURE_DOMAIN = "LAYER3";
     string constant SIGNING_VERSION = "1";
@@ -79,7 +79,7 @@ contract CubeTest is Test {
 
         deployer = new DeployProxy();
         proxyAddress = deployer.deployProxy(ownerPubKey);
-        demoCube = CUBE(payable(proxyAddress));
+        cubeContract = CUBE(payable(proxyAddress));
 
         sigUtils = new SigUtils();
     }
@@ -103,7 +103,7 @@ contract CubeTest is Test {
         emit QuestMetadata(questId, questType, difficulty, title, tags);
 
         vm.prank(ownerPubKey);
-        demoCube.initializeQuest(questId, communities, title, difficulty, questType, tags);
+        cubeContract.initializeQuest(questId, communities, title, difficulty, questType, tags);
     }
 
     function testInitializeQuestNotAsSigner() public {
@@ -123,7 +123,7 @@ contract CubeTest is Test {
         bytes memory expectedError = abi.encodeWithSelector(selector, ALICE, keccak256("SIGNER"));
         vm.expectRevert(expectedError);
         vm.prank(ALICE);
-        demoCube.initializeQuest(questId, communities, title, difficulty, questType, tags);
+        cubeContract.initializeQuest(questId, communities, title, difficulty, questType, tags);
     }
 
     function testMintCubes() public {
@@ -140,14 +140,14 @@ contract CubeTest is Test {
         cubeData[0] = _data;
         signatures[0] = signature;
 
-        bool isSigner = demoCube.hasRole(keccak256("SIGNER"), ownerPubKey);
+        bool isSigner = cubeContract.hasRole(keccak256("SIGNER"), ownerPubKey);
         assertEq(isSigner, true);
 
         hoax(adminAddress, 10 ether);
-        demoCube.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
 
-        assertEq(demoCube.tokenURI(0), "ipfs://abc");
-        assertEq(demoCube.ownerOf(0), BOB);
+        assertEq(cubeContract.tokenURI(0), "ipfs://abc");
+        assertEq(cubeContract.ownerOf(0), BOB);
     }
 
     function testNonceReuse() public {
@@ -176,7 +176,7 @@ contract CubeTest is Test {
 
         hoax(adminAddress, 20 ether);
         vm.expectRevert(CUBE.CUBE__NonceAlreadyUsed.selector);
-        demoCube.mintCubes{value: 20 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
     }
 
     function testNonceReuseDifferentSigners() public {
@@ -206,7 +206,7 @@ contract CubeTest is Test {
 
         hoax(adminAddress, 20 ether);
         vm.expectRevert(CUBE.CUBE__NonceAlreadyUsed.selector);
-        demoCube.mintCubes{value: 20 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
     }
 
     function testMultipleCubeDataMint() public {
@@ -233,8 +233,8 @@ contract CubeTest is Test {
         cubeData[1] = data2;
 
         hoax(adminAddress, 20 ether);
-        demoCube.mintCubes{value: 20 ether}(cubeData, signatures);
-        assertEq(demoCube.ownerOf(1), ALICE);
+        cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
+        assertEq(cubeContract.ownerOf(1), ALICE);
     }
 
     function testMismatchCubeDataAndSignatureArray() public {
@@ -255,7 +255,7 @@ contract CubeTest is Test {
 
         hoax(adminAddress, 20 ether);
         vm.expectRevert(CUBE.CUBE__SignatureAndCubesInputMismatch.selector);
-        demoCube.mintCubes{value: 20 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
     }
 
     function testEmptySignatureArray() public {
@@ -277,7 +277,7 @@ contract CubeTest is Test {
         hoax(adminAddress, 20 ether);
         // expected error: ECDSAInvalidSignatureLength(0)
         vm.expectRevert();
-        demoCube.mintCubes{value: 20 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
     }
 
     function testEmptyCubeDataTxs() public {
@@ -296,12 +296,12 @@ contract CubeTest is Test {
         cubeData[0] = data;
 
         hoax(adminAddress, 10 ether);
-        demoCube.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
     }
 
     function testEmptyReferrals() public {
         CUBE.CubeData memory data = sigUtils.getTestCubeData(ALICE, BOB);
-        data.refs = new CUBE.ReferralData[](1);
+        data.recipients = new CUBE.FeeRecipient[](1);
 
         bytes32 structHash = sigUtils.getStructHash(data);
         bytes32 digest = sigUtils.getDigest(getDomainSeparator(), structHash);
@@ -315,27 +315,15 @@ contract CubeTest is Test {
         cubeData[0] = data;
 
         hoax(adminAddress, 10 ether);
-        demoCube.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
     }
 
     function testMultipleRefPayouts() public {
         CUBE.CubeData memory data = sigUtils.getTestCubeData(ALICE, BOB);
-        data.refs = new CUBE.ReferralData[](3);
-        data.refs[0] = CUBE.ReferralData({
-            referrer: ALICE,
-            BPS: 500,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
-        data.refs[1] = CUBE.ReferralData({
-            referrer: BOB,
-            BPS: 4000,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
-        data.refs[2] = CUBE.ReferralData({
-            referrer: adminAddress,
-            BPS: 4000,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
+        data.recipients = new CUBE.FeeRecipient[](3);
+        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500});
+        data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 4000});
+        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 4000});
 
         bytes32 structHash = sigUtils.getStructHash(data);
         bytes32 digest = sigUtils.getDigest(getDomainSeparator(), structHash);
@@ -349,7 +337,7 @@ contract CubeTest is Test {
         cubeData[0] = data;
 
         hoax(adminAddress, 10 ether);
-        demoCube.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
 
         assertEq(ALICE.balance, 10 ether * 0.05); // 5%
         assertEq(BOB.balance, 10 ether * 0.4); // 40%
@@ -358,22 +346,10 @@ contract CubeTest is Test {
 
     function testExceedContractBalance() public {
         CUBE.CubeData memory data = sigUtils.getTestCubeData(ALICE, BOB);
-        data.refs = new CUBE.ReferralData[](3);
-        data.refs[0] = CUBE.ReferralData({
-            referrer: ALICE,
-            BPS: 500,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
-        data.refs[1] = CUBE.ReferralData({
-            referrer: BOB,
-            BPS: 8000,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
-        data.refs[2] = CUBE.ReferralData({
-            referrer: adminAddress,
-            BPS: 8000,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
+        data.recipients = new CUBE.FeeRecipient[](3);
+        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500});
+        data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 8000});
+        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 8000});
 
         bytes32 structHash = sigUtils.getStructHash(data);
         bytes32 digest = sigUtils.getDigest(getDomainSeparator(), structHash);
@@ -387,8 +363,8 @@ contract CubeTest is Test {
         cubeData[0] = data;
 
         hoax(adminAddress, 10 ether);
-        vm.expectRevert(CUBE.CUBE__ExcessiveReferralPayout.selector);
-        demoCube.mintCubes{value: 10 ether}(cubeData, signatures);
+        vm.expectRevert(CUBE.CUBE__ExcessiveFeePayout.selector);
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
 
         // alice's balance should be 0 since contract tx reverted
         assertEq(ALICE.balance, 0);
@@ -396,22 +372,13 @@ contract CubeTest is Test {
 
     function testTooHighReferrerBPS() public {
         CUBE.CubeData memory data = sigUtils.getTestCubeData(ALICE, BOB);
-        data.refs = new CUBE.ReferralData[](3);
-        data.refs[0] = CUBE.ReferralData({
-            referrer: ALICE,
-            BPS: 500,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
+        data.recipients = new CUBE.FeeRecipient[](3);
+        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500});
+        data.recipients[1] = CUBE.FeeRecipient({
+            recipient: BOB,
+            BPS: 10_001 // max is 10k
         });
-        data.refs[1] = CUBE.ReferralData({
-            referrer: BOB,
-            BPS: 10_001, // max is 10k
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
-        data.refs[2] = CUBE.ReferralData({
-            referrer: adminAddress,
-            BPS: 4000,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
+        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 4000});
 
         bytes32 structHash = sigUtils.getStructHash(data);
         bytes32 digest = sigUtils.getDigest(getDomainSeparator(), structHash);
@@ -426,27 +393,15 @@ contract CubeTest is Test {
 
         hoax(adminAddress, 10 ether);
         vm.expectRevert(CUBE.CUBE__BPSTooHigh.selector);
-        demoCube.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
     }
 
     function testTooHighReferralAmount() public {
         CUBE.CubeData memory data = sigUtils.getTestCubeData(ALICE, BOB);
-        data.refs = new CUBE.ReferralData[](3);
-        data.refs[0] = CUBE.ReferralData({
-            referrer: ALICE,
-            BPS: 500,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
-        data.refs[1] = CUBE.ReferralData({
-            referrer: BOB,
-            BPS: 9000,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
-        data.refs[2] = CUBE.ReferralData({
-            referrer: adminAddress,
-            BPS: 4000,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
+        data.recipients = new CUBE.FeeRecipient[](3);
+        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500});
+        data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 9000});
+        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 4000});
 
         bytes32 structHash = sigUtils.getStructHash(data);
         bytes32 digest = sigUtils.getDigest(getDomainSeparator(), structHash);
@@ -460,8 +415,8 @@ contract CubeTest is Test {
         cubeData[0] = data;
 
         hoax(adminAddress, 10 ether);
-        vm.expectRevert(CUBE.CUBE__ExcessiveReferralPayout.selector);
-        demoCube.mintCubes{value: 10 ether}(cubeData, signatures);
+        vm.expectRevert(CUBE.CUBE__ExcessiveFeePayout.selector);
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
         assertEq(ALICE.balance, 0);
     }
 
@@ -490,7 +445,7 @@ contract CubeTest is Test {
 
         hoax(adminAddress, 20 ether);
         //vm.expectRevert(CUBE.CUBE__NonceAlreadyUsed.selector);
-        demoCube.mintCubes{value: 20 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
     }
 
     function testMultipleReferrers() public {
@@ -499,22 +454,10 @@ contract CubeTest is Test {
         CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
         bytes[] memory signatures = new bytes[](1);
 
-        _data.refs = new CUBE.ReferralData[](3);
-        _data.refs[0] = CUBE.ReferralData({
-            referrer: ALICE,
-            BPS: 500,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
-        _data.refs[1] = CUBE.ReferralData({
-            referrer: BOB,
-            BPS: 800,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
-        _data.refs[2] = CUBE.ReferralData({
-            referrer: adminAddress,
-            BPS: 1000,
-            data: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002
-        });
+        _data.recipients = new CUBE.FeeRecipient[](3);
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500});
+        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 800});
+        _data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 1000});
 
         bytes32 structHash = sigUtils.getStructHash(_data);
         bytes32 digest = sigUtils.getDigest(getDomainSeparator(), structHash);
@@ -525,7 +468,7 @@ contract CubeTest is Test {
         signatures[0] = signature;
 
         hoax(adminAddress, 10 ether);
-        demoCube.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
 
         uint256 expectedBalAlice = 10 ether * 0.05;
         assertEq(ALICE.balance, expectedBalAlice);
@@ -538,14 +481,14 @@ contract CubeTest is Test {
         assertEq(proxyAddress.balance, expectedMintProfit);
 
         vm.prank(ownerPubKey);
-        demoCube.withdraw();
+        cubeContract.withdraw();
 
         assertEq(ownerPubKey.balance, expectedMintProfit);
         assertEq(proxyAddress.balance, 0);
     }
 
     function testReferralFees() public {
-        CUBE.CubeData memory _data = sigUtils.getTestCubeData(ALICE, BOB);
+        CUBE.CubeData memory _data = sigUtils.getTestCubeData({_feeRecipient: ALICE, _mintTo: BOB});
 
         bytes32 structHash = sigUtils.getStructHash(_data);
         bytes32 digest = sigUtils.getDigest(getDomainSeparator(), structHash);
@@ -558,14 +501,16 @@ contract CubeTest is Test {
         cubeData[0] = _data;
         signatures[0] = signature;
 
+        // send from admin
         hoax(adminAddress, 10 ether);
-        demoCube.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
 
         uint256 balanceAlice = ALICE.balance;
         uint256 balanceContract = proxyAddress.balance;
 
-        // 5% of 10 ether
-        uint256 expectedBal = 10 ether * 0.05;
+        // 33% of 10 ether
+        uint256 expectedBal = 10 ether * 0.33;
+
         assertEq(balanceAlice, expectedBal);
         assertEq(balanceContract, 10 ether - expectedBal);
     }
@@ -581,7 +526,7 @@ contract CubeTest is Test {
         CUBE.QuestType questType = CUBE.QuestType.QUEST;
         vm.recordLogs();
         vm.prank(ownerPubKey);
-        demoCube.initializeQuest(questId, communities, title, difficulty, questType, tags);
+        cubeContract.initializeQuest(questId, communities, title, difficulty, questType, tags);
 
         Vm.Log[] memory entries = vm.getRecordedLogs();
 
@@ -589,65 +534,30 @@ contract CubeTest is Test {
         assert(uint256(entries[1].topics[1]) == questId);
     }
 
-    function testReceiveFallback() public {
-        uint256 sendAmount = 1 ether;
-        vm.deal(address(demoCube), sendAmount);
-        (bool success,) = address(demoCube).call{value: 2 ether}("");
-        assert(success == true);
-
-        uint256 balance = address(demoCube).balance;
-        console.log("contract balance: %s", balance);
-
-        assertEq(balance, sendAmount + 2 ether, "Contract should receive Ether");
-
-        uint256 initialAdminBalance = ownerPubKey.balance;
-
-        // Call withdraw function
-        vm.prank(ownerPubKey);
-        demoCube.withdraw();
-
-        console.log("contract balance after withdrawal: %s", address(demoCube).balance);
-
-        // Check the contract's balance after withdrawal
-        assertEq(address(demoCube).balance, 0, "Contract balance should be 0 after withdrawal");
-
-        // Check the balance of the ADMIN
-        uint256 finalAdminBalance = ownerPubKey.balance;
-        console.log("admin balance: %s", finalAdminBalance);
-        assert(finalAdminBalance > initialAdminBalance);
-    }
-
     function testTurnOffMinting() public {
-        bool isActive = demoCube.s_isMintingActive();
+        bool isActive = cubeContract.s_isMintingActive();
 
         console.logBool(isActive);
         vm.prank(ownerPubKey);
-        demoCube.setIsMintingActive(false);
+        cubeContract.setIsMintingActive(false);
 
-        bool isActiveUpdated = demoCube.s_isMintingActive();
+        bool isActiveUpdated = cubeContract.s_isMintingActive();
         console.logBool(isActiveUpdated);
 
         assert(isActiveUpdated != isActive);
     }
 
     function test721Interface() public view {
-        bool supportsInterface = demoCube.supportsInterface(type(IERC721).interfaceId);
+        bool supportsInterface = cubeContract.supportsInterface(type(IERC721).interfaceId);
         assert(supportsInterface == true);
-    }
-
-    function testSetTokenURI() public {
-        vm.prank(ownerPubKey);
-        demoCube.setTokenURI(0, "hey");
     }
 
     function testRevokeAdminRole() public {
         bytes32 signerRole = keccak256("SIGNER");
-        bool isSigner = demoCube.hasRole(signerRole, ownerPubKey);
-
-        console.logBool(isSigner);
+        bool isSigner = cubeContract.hasRole(signerRole, ownerPubKey);
+        assertEq(isSigner, true);
 
         vm.prank(ownerPubKey);
-        demoCube.revokeRole(demoCube.DEFAULT_ADMIN_ROLE(), ownerPubKey);
-        console.log(demoCube.hasRole(signerRole, ownerPubKey));
+        cubeContract.renounceRole(signerRole, ownerPubKey);
     }
 }
