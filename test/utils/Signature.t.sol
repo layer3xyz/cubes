@@ -3,7 +3,7 @@ pragma solidity 0.8.20;
 
 import {CUBE} from "../../src/CUBE.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessagehashUtils.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 contract SigUtils is CUBE {
     using ECDSA for bytes32;

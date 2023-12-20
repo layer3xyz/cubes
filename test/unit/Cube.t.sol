@@ -5,7 +5,7 @@ import {DeployProxy} from "../../script/DeployProxy.s.sol";
 import {Test, console, Vm} from "forge-std/Test.sol";
 import {CUBE} from "../../src/CUBE.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessagehashUtils.sol";
+import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {SigUtils} from "../utils/Signature.t.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 
