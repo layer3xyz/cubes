@@ -83,18 +83,15 @@ contract CUBE is
     /// @param difficulty The difficulty level of the quest (BEGINNER, INTERMEDIATE, ADVANCED)
     /// @param title The title of the quest
     /// @param tags An array of tags associated with the quest
+    /// @param communities An array of communities associated with the quest
     event QuestMetadata(
         uint256 indexed questId,
         QuestType questType,
         Difficulty difficulty,
         string title,
-        string[] tags
+        string[] tags,
+        string[] communities
     );
-
-    /// @notice Emitted when a community is associated with a quest
-    /// @param questId The unique identifier of the quest
-    /// @param community The name of the community associated with the quest
-    event QuestCommunity(uint256 indexed questId, string community);
 
     /// @notice Emitted when a Cube NFT is claimed
     /// @param questId The quest ID associated with the Cube
@@ -240,16 +237,9 @@ contract CUBE is
         string memory title,
         Difficulty difficulty,
         QuestType questType,
-        string[] calldata tags
+        string[] memory tags
     ) external onlyRole(SIGNER_ROLE) {
-        for (uint256 i = 0; i < communities.length;) {
-            emit QuestCommunity(questId, communities[i]);
-            unchecked {
-                ++i;
-            }
-        }
-
-        emit QuestMetadata(questId, questType, difficulty, title, tags);
+        emit QuestMetadata(questId, questType, difficulty, title, tags, communities);
     }
 
     /// @notice Mints multiple cubes based on provided data and signatures
