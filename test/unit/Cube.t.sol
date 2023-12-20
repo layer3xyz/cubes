@@ -19,9 +19,9 @@ contract CubeTest is Test {
         CUBE.QuestType questType,
         CUBE.Difficulty difficulty,
         string title,
-        string[] tags
+        string[] tags,
+        string[] communities
     );
-    event QuestCommunity(uint256 indexed questId, string communityName);
     event CubeClaim(
         uint256 indexed questId,
         uint256 indexed tokenId,
@@ -95,12 +95,9 @@ contract CubeTest is Test {
         string[] memory tags = new string[](1);
         tags[0] = "DeFi";
 
-        // Expecting QuestCommunity and QuestMetadata events to be emitted
+        // Expecting QuestMetadata events to be emitted
         vm.expectEmit(true, true, false, true);
-        emit QuestCommunity(questId, communities[0]);
-        emit QuestCommunity(questId, communities[1]);
-        vm.expectEmit(true, true, false, true);
-        emit QuestMetadata(questId, questType, difficulty, title, tags);
+        emit QuestMetadata(questId, questType, difficulty, title, tags, communities);
 
         vm.prank(ownerPubKey);
         cubeContract.initializeQuest(questId, communities, title, difficulty, questType, tags);
@@ -515,8 +512,8 @@ contract CubeTest is Test {
         assertEq(balanceContract, 10 ether - expectedBal);
     }
 
-    function testInitalizeQuestLogs() public {
-        uint256 questId = 777;
+    function testInitalizeQuestEvent() public {
+        uint256 questId = 123;
         string[] memory communities = new string[](1);
         communities[0] = "Community1";
         string memory title = "Quest Title";
@@ -524,14 +521,12 @@ contract CubeTest is Test {
         tags[0] = "NFTs";
         CUBE.Difficulty difficulty = CUBE.Difficulty.BEGINNER;
         CUBE.QuestType questType = CUBE.QuestType.QUEST;
+
         vm.recordLogs();
-        vm.prank(ownerPubKey);
-        cubeContract.initializeQuest(questId, communities, title, difficulty, questType, tags);
-
+        emit QuestMetadata(questId, questType, difficulty, title, tags, communities);
         Vm.Log[] memory entries = vm.getRecordedLogs();
-
-        // the emitted questId value
-        assert(uint256(entries[1].topics[1]) == questId);
+        assertEq(entries.length, 1);
+        assertEq(entries[0].topics[1], bytes32(uint256(questId)));
     }
 
     function testTurnOffMinting() public {

@@ -93,11 +93,6 @@ contract CUBE is
         string[] communities
     );
 
-    /// @notice Emitted when a community is associated with a quest
-    /// @param questId The unique identifier of the quest
-    /// @param community The name of the community associated with the quest
-    event QuestCommunity(uint256 indexed questId, string community);
-
     /// @notice Emitted when a Cube NFT is claimed
     /// @param questId The quest ID associated with the Cube
     /// @param tokenId The token ID of the minted Cube
@@ -238,11 +233,11 @@ contract CUBE is
     /// @param questType Type of the quest
     function initializeQuest(
         uint256 questId,
-        string[] calldata communities,
-        string calldata title,
+        string[] memory communities,
+        string memory title,
         Difficulty difficulty,
         QuestType questType,
-        string[] calldata tags
+        string[] memory tags
     ) external onlyRole(SIGNER_ROLE) {
         emit QuestMetadata(questId, questType, difficulty, title, tags, communities);
     }
