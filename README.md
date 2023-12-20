@@ -27,7 +27,7 @@ When a quest is created in our backend (currently only supported by Layer3 admin
 
 ### Contract Specification
 
-- Deploying Network: OP Mainnet, Base or Polygon
+- Deploying Network: Base/OP Mainnet
 - Contract Name: CUBE
 - Version: 0.8.20 (paris)
 - Optimizations: Yes, 10,000 runs.
