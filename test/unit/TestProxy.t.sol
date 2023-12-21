@@ -7,6 +7,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
 import {CubeV2} from "../../src/CubeV2.sol";
+import {CUBE} from "../../src/CUBE.sol";
 
 contract DeployAndUpgradeTest is StdCheats, Test {
     DeployProxy public deployProxy;
@@ -29,6 +30,13 @@ contract DeployAndUpgradeTest is StdCheats, Test {
 
         string memory expectedValue = deployProxy.NAME();
         assertEq(expectedValue, CubeV2(payable(proxyAddress)).name());
+    }
+
+    function testUnauthorizedUpgrade() public {
+        bytes4 selector = bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)"));
+        bytes memory expectedError = abi.encodeWithSelector(selector, BOB, keccak256("UPGRADER"));
+        vm.expectRevert(expectedError);
+        upgradeCube.upgradeCube(BOB, proxyAddress, 55);
     }
 
     function testV2SignerRoleVariable() public {

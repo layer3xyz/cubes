@@ -186,7 +186,7 @@ contract CUBE is
         string memory _signingDomain,
         string memory _signatureVersion,
         address _admin
-    ) public initializer {
+    ) external initializer {
         __ERC721_init(_tokenName, _tokenSymbol);
         __EIP712_init(_signingDomain, _signatureVersion);
         __AccessControl_init();

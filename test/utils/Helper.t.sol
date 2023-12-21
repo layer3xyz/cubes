@@ -5,7 +5,7 @@ import {CUBE} from "../../src/CUBE.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
-contract SigUtils is CUBE {
+contract Helper is CUBE {
     using ECDSA for bytes32;
     using MessageHashUtils for bytes32;
 
@@ -67,5 +67,9 @@ contract SigUtils is CUBE {
             transactions: transactions,
             recipients: recipients
         });
+    }
+
+    function processPayouts(CubeData calldata _data) public {
+        return _processPayouts(_data);
     }
 }
