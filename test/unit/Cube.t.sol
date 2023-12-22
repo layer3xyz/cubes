@@ -26,13 +26,21 @@ contract CubeTest is Test {
     event CubeClaim(
         uint256 indexed questId,
         uint256 indexed tokenId,
+        address indexed claimer,
         uint256 issueNumber,
-        uint256 userId,
-        uint256 completedAt,
-        string walletName,
+        string walletProvider,
         string embedOrigin
     );
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
+
+    event TokenReward(
+        uint256 indexed cubeTokenId,
+        address indexed tokenAddress,
+        uint256 indexed chainId,
+        uint256 amount,
+        uint256 tokenId,
+        CUBE.TokenType tokenType
+    );
 
     DeployProxy public deployer;
     CUBE public cubeContract;
@@ -54,6 +62,9 @@ contract CubeTest is Test {
     uint256 internal adminPrivateKey;
     address public constant ALICE = address(2);
     address public constant BOB = address(3);
+
+    address public notAdminAddress;
+    uint256 internal notAdminPrivKey;
 
     address public proxyAddress;
 
@@ -77,6 +88,9 @@ contract CubeTest is Test {
 
         adminPrivateKey = 0x01;
         adminAddress = vm.addr(adminPrivateKey);
+
+        notAdminPrivKey = 0x099;
+        notAdminAddress = vm.addr(notAdminPrivKey);
 
         deployer = new DeployProxy();
         proxyAddress = deployer.deployProxy(ownerPubKey);
@@ -129,27 +143,55 @@ contract CubeTest is Test {
     }
 
     function testMintCubes() public {
-        CUBE.CubeData memory _data = helper.getTestCubeData(ALICE, BOB);
-
-        bytes32 structHash = helper.getStructHash(_data);
-        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
-
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-        bytes[] memory signatures = new bytes[](1);
-        cubeData[0] = _data;
-        signatures[0] = signature;
+        (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getSignedCubeMintData();
 
         bool isSigner = cubeContract.hasRole(keccak256("SIGNER"), adminAddress);
         assertEq(isSigner, true);
 
         hoax(adminAddress, 10 ether);
+
         cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
 
         assertEq(cubeContract.tokenURI(0), "ipfs://abc");
         assertEq(cubeContract.ownerOf(0), BOB);
+    }
+
+    function testMintCubesRewardEvent() public {
+        (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getSignedCubeMintData();
+
+        hoax(adminAddress, 10 ether);
+
+        // Expecting TokenReward event to be emitted
+        vm.expectEmit(true, true, true, true);
+        emit TokenReward(0, address(0), 137, 5, 0, CUBE.TokenType.NATIVE);
+
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
+    }
+
+    function testMintCubesTxEvent() public {
+        (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getSignedCubeMintData();
+
+        hoax(adminAddress, 10 ether);
+
+        // Expecting CubeTransaction event to be emitted
+        vm.expectEmit(true, true, true, true);
+        emit CubeTransaction(
+            0, 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002, 137
+        );
+
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
+    }
+
+    function testMintCubesClaimEvent() public {
+        (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getSignedCubeMintData();
+
+        hoax(adminAddress, 10 ether);
+
+        // Expecting TokenReward events to be emitted
+        vm.expectEmit(true, true, true, true);
+        emit CubeClaim(1, 0, BOB, 1, "MetaMask", "test.com");
+
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
     }
 
     function testNonceReuse() public {
@@ -181,12 +223,12 @@ contract CubeTest is Test {
         cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
     }
 
-    function testNonceReuseDifferentSigners() public {
+    function testCubeMintDifferentSigners() public {
         CUBE.CubeData memory data = helper.getTestCubeData(ALICE, BOB);
         CUBE.CubeData memory data2 = helper.getTestCubeData(BOB, ALICE);
 
         data.nonce = 1;
-        data2.nonce = 1;
+        data2.nonce = 2;
 
         bytes32 structHash = helper.getStructHash(data);
         bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
@@ -195,7 +237,7 @@ contract CubeTest is Test {
 
         bytes32 structHash2 = helper.getStructHash(data2);
         bytes32 digest2 = helper.getDigest(getDomainSeparator(), structHash2);
-        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(adminPrivateKey, digest2);
+        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(notAdminPrivKey, digest2);
         bytes memory signature2 = abi.encodePacked(r2, s2, v2);
 
         bytes[] memory signatures = new bytes[](2);
@@ -207,7 +249,7 @@ contract CubeTest is Test {
         cubeData[1] = data2;
 
         hoax(adminAddress, 20 ether);
-        vm.expectRevert(CUBE.CUBE__NonceAlreadyUsed.selector);
+        vm.expectRevert(CUBE.CUBE__IsNotSigner.selector);
         cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
     }
 
@@ -280,6 +322,28 @@ contract CubeTest is Test {
         // expected error: ECDSAInvalidSignatureLength(0)
         vm.expectRevert();
         cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
+    }
+
+    function testInvalidSignature() public {
+        CUBE.CubeData memory _data = helper.getTestCubeData(ALICE, BOB);
+
+        bytes32 structHash = helper.getStructHash(_data);
+        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
+
+        // Sign the digest with a non-signer key
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(notAdminPrivKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
+        bytes[] memory signatures = new bytes[](1);
+        cubeData[0] = _data;
+        signatures[0] = signature;
+
+        hoax(adminAddress, 10 ether);
+
+        // Expect the mint to fail due to invalid signature
+        vm.expectRevert(CUBE.CUBE__IsNotSigner.selector);
+        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
     }
 
     function testEmptyCubeDataTxs() public {

@@ -23,10 +23,15 @@ contract DeployAndUpgradeTest is StdCheats, Test {
         deployProxy = new DeployProxy();
         upgradeCube = new UpgradeCube();
         proxyAddress = deployProxy.deployProxy(OWNER);
+
+        // setup necessary roles
+        vm.startBroadcast(OWNER);
+        CUBE(payable(proxyAddress)).grantRole(keccak256("UPGRADER"), OWNER);
+        vm.stopBroadcast();
     }
 
     function testERC721Name() public {
-        upgradeCube.upgradeCube(OWNER, proxyAddress, 55);
+        upgradeCube.upgradeCube(OWNER, proxyAddress);
 
         string memory expectedValue = deployProxy.NAME();
         assertEq(expectedValue, CubeV2(payable(proxyAddress)).name());
@@ -36,25 +41,23 @@ contract DeployAndUpgradeTest is StdCheats, Test {
         bytes4 selector = bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)"));
         bytes memory expectedError = abi.encodeWithSelector(selector, BOB, keccak256("UPGRADER"));
         vm.expectRevert(expectedError);
-        upgradeCube.upgradeCube(BOB, proxyAddress, 55);
+        upgradeCube.upgradeCube(BOB, proxyAddress);
     }
 
     function testV2SignerRoleVariable() public {
-        upgradeCube.upgradeCube(OWNER, proxyAddress, 55);
+        upgradeCube.upgradeCube(OWNER, proxyAddress);
 
         CubeV2 newCube = CubeV2(payable(proxyAddress));
         bytes32 signerRole = newCube.SIGNER_ROLE();
         assertEq(keccak256("SIGNER"), signerRole);
     }
 
-    function testV2MigratedVariable() public {
-        uint256 newVal = 12345;
-
-        upgradeCube.upgradeCube(OWNER, proxyAddress, newVal);
+    function testV2MigratedName() public {
+        upgradeCube.upgradeCube(OWNER, proxyAddress);
 
         CubeV2 newCube = CubeV2(payable(proxyAddress));
 
-        uint256 val = newCube.newValueV2();
-        assertEq(val, newVal);
+        string memory val = newCube.name();
+        assertEq(val, "Layer3 CUBE");
     }
 }
