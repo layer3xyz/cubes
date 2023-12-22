@@ -14,16 +14,11 @@ contract UpgradeCube is Script {
     uint256 public deployerKey;
     address public OWNER = address(0);
 
-    function upgradeCube(address _admin, address _proxyAddress, uint256 _newVal)
-        public
-        returns (address)
-    {
+    function upgradeCube(address _admin, address _proxyAddress) public returns (address) {
         vm.startPrank(_admin);
         CUBE proxy = CUBE(payable(_proxyAddress));
 
-        Upgrades.upgradeProxy(
-            _proxyAddress, "CubeV2.sol", abi.encodeCall(CubeV2.initializeV2, _newVal)
-        );
+        Upgrades.upgradeProxy(_proxyAddress, "CubeV2.sol", abi.encodeCall(CubeV2.initializeV2, ()));
         vm.stopPrank();
         return address(proxy);
     }

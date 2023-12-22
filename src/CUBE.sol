@@ -58,8 +58,11 @@ contract CUBE is
         keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
     bytes32 internal constant RECIPIENT_DATA_HASH =
         keccak256("FeeRecipient(address recipient,uint16 BPS)");
+    bytes32 internal constant REWARD_DATA_HASH = keccak256(
+        "RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType)"
+    );
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 userId,uint256 nonce,uint256 price,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients)FeeRecipient(address recipient,uint16 BPS)TransactionData(bytes32 txHash,uint256 chainId)"
+        "CubeData(uint256 questId,uint256 nonce,uint256 price,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType)TransactionData(bytes32 txHash,uint256 chainId)"
     );
 
     mapping(uint256 => uint256) internal s_questIssueNumbers;
@@ -75,6 +78,13 @@ contract CUBE is
         BEGINNER,
         INTERMEDIATE,
         ADVANCED
+    }
+
+    enum TokenType {
+        ERC20,
+        ERC721,
+        ERC1155,
+        NATIVE
     }
 
     /// @notice Emitted when a new quest is initialized
@@ -93,27 +103,43 @@ contract CUBE is
         string[] communities
     );
 
-    /// @notice Emitted when a Cube NFT is claimed
-    /// @param questId The quest ID associated with the Cube
-    /// @param tokenId The token ID of the minted Cube
-    /// @param issueNumber The issue number of the Cube
-    /// @param userId The ID of the user who claimed the Cube
+    /// @notice Emitted when a CUBE is claimed
+    /// @param questId The quest ID associated with the CUBE
+    /// @param tokenId The token ID of the minted CUBE
+    /// @param claimer Address of the CUBE claimer
+    /// @param issueNumber The issue number of the CUBE
     /// @param walletProvider The name of the wallet provider used for claiming
-    /// @param embedOrigin The origin of the embed associated with the Cube
+    /// @param embedOrigin The origin of the embed associated with the CUBE
     event CubeClaim(
         uint256 indexed questId,
         uint256 indexed tokenId,
+        address indexed claimer,
         uint256 issueNumber,
-        uint256 userId,
         string walletProvider,
         string embedOrigin
     );
 
-    /// @notice Emitted for each transaction associated with a Cube claim
+    /// @notice Emitted for each transaction associated with a CUBE claim
     /// @param tokenId The token ID of the Cube
     /// @param txHash The hash of the transaction
     /// @param chainId The blockchain chain ID of the transaction
     event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
+
+    /// @notice Emitted when there is a reward associated with a CUBE
+    /// @param cubeTokenId The token ID of the CUBE giving the reward
+    /// @param tokenAddress The token address of the reward
+    /// @param chainId The blockchain chain ID where the transaction occurred
+    /// @param amount The amount of the reward
+    /// @param tokenId Token ID of the reward (only applicable for ERC721 and ERC1155)
+    /// @param tokenType The type of reward token
+    event TokenReward(
+        uint256 indexed cubeTokenId,
+        address indexed tokenAddress,
+        uint256 indexed chainId,
+        uint256 amount,
+        uint256 tokenId,
+        TokenType tokenType
+    );
 
     /// @notice Emitted when a fee payout is made
     /// @param recipient The address of the payout recipient
@@ -130,7 +156,6 @@ contract CUBE is
 
     /// @dev Represents the data needed for minting a CUBE.
     /// @param questId The ID of the quest associated with the CUBE
-    /// @param userId The ID of the user to whom the CUBE will be minted
     /// @param nonce A unique number to prevent replay attacks
     /// @param price The price paid for minting the CUBE
     /// @param toAddress The address where the CUBE will be minted
@@ -139,9 +164,9 @@ contract CUBE is
     /// @param embedOrigin The origin source of the CUBE's embed content
     /// @param transactions An array of transactions related to the CUBE
     /// @param recipients An array of recipients for fee payouts
+    /// @param reward Data about the reward associated with the CUBE
     struct CubeData {
         uint256 questId;
-        uint256 userId;
         uint256 nonce;
         uint256 price;
         address toAddress;
@@ -150,6 +175,7 @@ contract CUBE is
         string embedOrigin;
         TransactionData[] transactions;
         FeeRecipient[] recipients;
+        RewardData reward;
     }
 
     /// @dev Represents a recipient for fee distribution.
@@ -160,7 +186,21 @@ contract CUBE is
         uint16 BPS;
     }
 
-    /// @dev Contains data about a specific transaction related to a Cube.
+    /// @dev Contains data about the token rewards associated with a CUBE.
+    /// @param tokenAddress The token address of the reward
+    /// @param chainId The blockchain chain ID where the transaction occurred
+    /// @param amount The amount of the reward
+    /// @param tokenId The token ID
+    /// @param tokenType The token type
+    struct RewardData {
+        address tokenAddress;
+        uint256 chainId;
+        uint256 amount;
+        uint256 tokenId;
+        TokenType tokenType;
+    }
+
+    /// @dev Contains data about a specific transaction related to a CUBE.
     /// @param txHash The hash of the transaction
     /// @param chainId The blockchain chain ID where the transaction occurred
     struct TransactionData {
@@ -186,7 +226,7 @@ contract CUBE is
         string memory _signingDomain,
         string memory _signatureVersion,
         address _admin
-    ) public initializer {
+    ) external initializer {
         __ERC721_init(_tokenName, _tokenSymbol);
         __EIP712_init(_signingDomain, _signatureVersion);
         __AccessControl_init();
@@ -195,8 +235,6 @@ contract CUBE is
         s_isMintingActive = true;
 
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
-        _grantRole(SIGNER_ROLE, _admin);
-        _grantRole(UPGRADER_ROLE, _admin);
     }
 
     /// @notice Authorizes an upgrade to a new contract implementation
@@ -214,32 +252,6 @@ contract CUBE is
     /// @return _tokenURI The URI of the specified token
     function tokenURI(uint256 _tokenId) public view override returns (string memory _tokenURI) {
         return s_tokenURIs[_tokenId];
-    }
-
-    /// @notice Enables or disables the minting process
-    /// @dev Can only be called by an account with the default admin role.
-    /// @param _isMintingActive Boolean indicating whether minting should be active
-    function setIsMintingActive(bool _isMintingActive) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        s_isMintingActive = _isMintingActive;
-        emit MintingSwitch(_isMintingActive);
-    }
-
-    /// @notice Initializes a new quest with given parameters
-    /// @dev Can only be called by an account with the signer role.
-    /// @param questId Unique identifier for the quest
-    /// @param communities Array of community names associated with the quest
-    /// @param title Title of the quest
-    /// @param difficulty Difficulty level of the quest
-    /// @param questType Type of the quest
-    function initializeQuest(
-        uint256 questId,
-        string[] memory communities,
-        string memory title,
-        Difficulty difficulty,
-        QuestType questType,
-        string[] memory tags
-    ) external onlyRole(SIGNER_ROLE) {
-        emit QuestMetadata(questId, questType, difficulty, title, tags, communities);
     }
 
     /// @notice Mints multiple cubes based on provided data and signatures
@@ -283,102 +295,98 @@ contract CUBE is
         }
     }
 
-    /// @notice Withdraws the contract's balance to the message sender
-    /// @dev Can only be called by an account with the default admin role.
-    function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        (bool success,) = msg.sender.call{value: address(this).balance}("");
-        if (!success) {
-            revert CUBE__WithdrawFailed();
-        }
-        emit ContractWithdrawal(address(this).balance);
-    }
-
     /// @notice Internal function to handle the logic of minting a single cube
     /// @dev Verifies the signer, handles nonce, transactions, referral payments, and minting.
-    /// @param _data The CubeData containing details of the minting
-    /// @param _signature The signature for verification
-    function _mintCube(CubeData calldata _data, bytes calldata _signature) internal {
+    /// @param data The CubeData containing details of the minting
+    /// @param signature The signature for verification
+    function _mintCube(CubeData calldata data, bytes calldata signature) internal {
         // Cache the tokenId
         uint256 tokenId = s_nextTokenId;
 
         // Validate the signature to ensure the mint request is authorized
-        _validateSignature(_data, _signature);
+        _validateSignature(data, signature);
 
         // Iterate over all the transactions in the mint request and emit events
-        for (uint256 i = 0; i < _data.transactions.length;) {
-            emit CubeTransaction(
-                s_questCompletionIdCounter,
-                _data.transactions[i].txHash,
-                _data.transactions[i].chainId
-            );
+        for (uint256 i = 0; i < data.transactions.length;) {
+            emit CubeTransaction(tokenId, data.transactions[i].txHash, data.transactions[i].chainId);
             unchecked {
                 ++i;
             }
         }
 
         // Set the token URI for the CUBE
-        s_tokenURIs[tokenId] = _data.tokenURI;
+        s_tokenURIs[tokenId] = data.tokenURI;
 
         // Increment the counters for quest completion, issue numbers, and token IDs
         unchecked {
-            ++s_questCompletionIdCounter;
-            ++s_questIssueNumbers[_data.questId];
+            ++s_questIssueNumbers[data.questId];
             ++s_nextTokenId;
         }
 
         // Process any payouts to fee recipients if applicable
-        if (_data.recipients.length > 0) {
-            _processPayouts(_data);
+        if (data.recipients.length > 0) {
+            _processPayouts(data);
         }
         // Perform the actual minting of the CUBE
-        _safeMint(_data.toAddress, tokenId);
+        _safeMint(data.toAddress, tokenId);
 
         // Emit an event indicating a CUBE has been claimed
         emit CubeClaim(
-            _data.questId,
+            data.questId,
             tokenId,
-            s_questIssueNumbers[_data.questId],
-            _data.userId,
-            _data.walletProvider,
-            _data.embedOrigin
+            data.toAddress,
+            s_questIssueNumbers[data.questId],
+            data.walletProvider,
+            data.embedOrigin
         );
+
+        if (data.reward.chainId != 0) {
+            emit TokenReward(
+                tokenId,
+                data.reward.tokenAddress,
+                data.reward.chainId,
+                data.reward.amount,
+                data.reward.tokenId,
+                data.reward.tokenType
+            );
+        }
     }
 
     /// @notice Validates the signature for a Cube minting request
     /// @dev Ensures that the signature is from a valid signer and the nonce hasn't been used before
-    /// @param _data The CubeData struct containing minting details
-    /// @param _signature The signature to be validated
-    function _validateSignature(CubeData calldata _data, bytes calldata _signature) internal {
-        address signer = _getSigner(_data, _signature);
+    /// @param data The CubeData struct containing minting details
+    /// @param signature The signature to be validated
+    function _validateSignature(CubeData calldata data, bytes calldata signature) internal {
+        address signer = _getSigner(data, signature);
         if (!hasRole(SIGNER_ROLE, signer)) {
             revert CUBE__IsNotSigner();
         }
-        if (s_nonces[_data.nonce]) {
+        if (s_nonces[data.nonce]) {
             revert CUBE__NonceAlreadyUsed();
         }
-        s_nonces[_data.nonce] = true;
+        s_nonces[data.nonce] = true;
     }
 
     /// @notice Processes fee payouts to specified recipients
     /// @dev Distributes a portion of the minting fee to designated addresses based on their Basis Points (BPS)
-    /// @param _data The CubeData struct containing payout details
-    function _processPayouts(CubeData calldata _data) internal {
+    /// @param data The CubeData struct containing payout details
+    function _processPayouts(CubeData calldata data) internal {
         uint256 totalAmount;
 
         // max basis points is 10k (100%)
         uint16 maxBps = 10_000;
         uint256 contractBalance = address(this).balance;
-        for (uint256 i = 0; i < _data.recipients.length;) {
-            if (_data.recipients[i].BPS > maxBps) {
+        for (uint256 i = 0; i < data.recipients.length;) {
+            if (data.recipients[i].BPS > maxBps) {
                 revert CUBE__BPSTooHigh();
             }
 
             // Calculate the referral amount for each recipient
-            uint256 referralAmount = (_data.price * _data.recipients[i].BPS) / maxBps;
+            uint256 referralAmount = (data.price * data.recipients[i].BPS) / maxBps;
             totalAmount = totalAmount + referralAmount;
 
             // Ensure the total payout does not exceed the cube price or contract balance
-            if (totalAmount > _data.price) {
+            if (totalAmount > data.price) {
                 revert CUBE__ExcessiveFeePayout();
             }
             if (totalAmount > contractBalance) {
@@ -386,7 +394,7 @@ contract CUBE is
             }
 
             // Transfer the referral amount to the recipient
-            address recipient = _data.recipients[i].recipient;
+            address recipient = data.recipients[i].recipient;
             if (recipient != address(0)) {
                 (bool success,) = recipient.call{value: referralAmount}("");
                 if (!success) {
@@ -402,43 +410,43 @@ contract CUBE is
 
     /// @notice Recovers the signer's address from the CubeData and its associated signature
     /// @dev Utilizes EIP-712 typed data hashing and ECDSA signature recovery
-    /// @param _data The CubeData struct containing the details of the minting request
-    /// @param _sig The signature associated with the CubeData
+    /// @param data The CubeData struct containing the details of the minting request
+    /// @param sig The signature associated with the CubeData
     /// @return The address of the signer who signed the CubeData
-    function _getSigner(CubeData calldata _data, bytes calldata _sig)
+    function _getSigner(CubeData calldata data, bytes calldata sig)
         internal
         view
         returns (address)
     {
-        bytes32 digest = _computeDigest(_data);
-        return digest.recover(_sig);
+        bytes32 digest = _computeDigest(data);
+        return digest.recover(sig);
     }
 
     /// @notice Internal function to compute the EIP712 digest for CubeData
     /// @dev Generates the digest that must be signed by the signer.
-    /// @param _data The CubeData to generate a digest for
+    /// @param data The CubeData to generate a digest for
     /// @return The computed EIP712 digest
-    function _computeDigest(CubeData calldata _data) internal view returns (bytes32) {
-        return _hashTypedDataV4(keccak256(_getStructHash(_data)));
+    function _computeDigest(CubeData calldata data) internal view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(_getStructHash(data)));
     }
 
     /// @notice Internal function to generate the struct hash for CubeData
     /// @dev Encodes the CubeData struct into a hash as per EIP712 standard.
-    /// @param _data The CubeData struct to hash
+    /// @param data The CubeData struct to hash
     /// @return A hash representing the encoded CubeData
-    function _getStructHash(CubeData calldata _data) internal pure returns (bytes memory) {
+    function _getStructHash(CubeData calldata data) internal pure returns (bytes memory) {
         return abi.encode(
             CUBE_DATA_HASH,
-            _data.questId,
-            _data.userId,
-            _data.nonce,
-            _data.price,
-            _data.toAddress,
-            _encodeString(_data.walletProvider),
-            _encodeString(_data.tokenURI),
-            _encodeString(_data.embedOrigin),
-            _encodeCompletedTxs(_data.transactions),
-            _encodeReferrals(_data.recipients)
+            data.questId,
+            data.nonce,
+            data.price,
+            data.toAddress,
+            _encodeString(data.walletProvider),
+            _encodeString(data.tokenURI),
+            _encodeString(data.embedOrigin),
+            _encodeCompletedTxs(data.transactions),
+            _encodeRecipients(data.recipients),
+            _encodeReward(data.reward)
         );
     }
 
@@ -490,7 +498,7 @@ contract CUBE is
     /// @dev Used to aggregate multiple fee recipient entries into a single hash for EIP712 encoding
     /// @param data An array of FeeRecipient structs to be encoded
     /// @return A bytes32 hash representing the aggregated and encoded fee recipient data
-    function _encodeReferrals(FeeRecipient[] calldata data) internal pure returns (bytes32) {
+    function _encodeRecipients(FeeRecipient[] calldata data) internal pure returns (bytes32) {
         bytes32[] memory encodedRecipients = new bytes32[](data.length);
         for (uint256 i = 0; i < data.length;) {
             encodedRecipients[i] = keccak256(_encodeRecipient(data[i]));
@@ -500,6 +508,58 @@ contract CUBE is
         }
 
         return keccak256(abi.encodePacked(encodedRecipients));
+    }
+
+    /// @notice Encodes the reward data for a CUBE mint
+    /// @param data An array of FeeRecipient structs to be encoded
+    /// @return A bytes32 hash representing the encoded reward data
+    function _encodeReward(RewardData calldata data) internal pure returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                REWARD_DATA_HASH,
+                data.tokenAddress,
+                data.chainId,
+                data.amount,
+                data.tokenId,
+                data.tokenType
+            )
+        );
+    }
+
+    /// @notice Enables or disables the minting process
+    /// @dev Can only be called by an account with the default admin role.
+    /// @param _isMintingActive Boolean indicating whether minting should be active
+    function setIsMintingActive(bool _isMintingActive) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        s_isMintingActive = _isMintingActive;
+        emit MintingSwitch(_isMintingActive);
+    }
+
+    /// @notice Withdraws the contract's balance to the message sender
+    /// @dev Can only be called by an account with the default admin role.
+    function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
+        (bool success,) = msg.sender.call{value: address(this).balance}("");
+        if (!success) {
+            revert CUBE__WithdrawFailed();
+        }
+        emit ContractWithdrawal(address(this).balance);
+    }
+
+    /// @notice Initializes a new quest with given parameters
+    /// @dev Can only be called by an account with the signer role.
+    /// @param questId Unique identifier for the quest
+    /// @param communities Array of community names associated with the quest
+    /// @param title Title of the quest
+    /// @param difficulty Difficulty level of the quest
+    /// @param questType Type of the quest
+    function initializeQuest(
+        uint256 questId,
+        string[] memory communities,
+        string memory title,
+        Difficulty difficulty,
+        QuestType questType,
+        string[] memory tags
+    ) external onlyRole(SIGNER_ROLE) {
+        emit QuestMetadata(questId, questType, difficulty, title, tags, communities);
     }
 
     /// @notice Checks if the contract implements an interface

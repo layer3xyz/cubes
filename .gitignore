@@ -17,6 +17,7 @@ docs/
 
 # local tests
 coverage-report.txt
+.gas-snapshot
 bin/*
 
 node_modules
