@@ -48,7 +48,6 @@ contract CUBE is
     error CUBE__ExceedsContractBalance();
 
     uint256 internal s_nextTokenId;
-    uint256 internal s_questCompletionIdCounter;
     bool public s_isMintingActive;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER");
