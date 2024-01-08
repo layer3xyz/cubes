@@ -54,14 +54,14 @@ contract CUBE is
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER");
 
     bytes32 internal constant TX_DATA_HASH =
-        keccak256("TransactionData(bytes32 txHash,uint256 chainId)");
+        keccak256("TransactionData(string txHash,string networkChainId)");
     bytes32 internal constant RECIPIENT_DATA_HASH =
         keccak256("FeeRecipient(address recipient,uint16 BPS)");
     bytes32 internal constant REWARD_DATA_HASH = keccak256(
         "RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType)"
     );
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 nonce,uint256 price,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType)TransactionData(bytes32 txHash,uint256 chainId)"
+        "CubeData(uint256 questId,uint256 nonce,uint256 price,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType)TransactionData(string txHash,string networkChainId)"
     );
 
     mapping(uint256 => uint256) internal s_questIssueNumbers;
@@ -119,10 +119,13 @@ contract CUBE is
     );
 
     /// @notice Emitted for each transaction associated with a CUBE claim
-    /// @param tokenId The token ID of the Cube
+    /// This event is designed to support both EVM and non-EVM blockchains
+    /// @param cubeTokenId The token ID of the Cube
     /// @param txHash The hash of the transaction
-    /// @param chainId The blockchain chain ID of the transaction
-    event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
+    /// @param networkChainId The network and chain ID of the transaction in the format <network>:<chain-id>
+    event CubeTransaction(
+        uint256 indexed cubeTokenId, string indexed txHash, string indexed networkChainId
+    );
 
     /// @notice Emitted when there is a reward associated with a CUBE
     /// @param cubeTokenId The token ID of the CUBE giving the reward
@@ -199,12 +202,13 @@ contract CUBE is
         TokenType tokenType;
     }
 
-    /// @dev Contains data about a specific transaction related to a CUBE.
+    /// @dev Contains data about a specific transaction related to a CUBE
+    /// and is designed to support both EVM and non-EVM data.
     /// @param txHash The hash of the transaction
-    /// @param chainId The blockchain chain ID where the transaction occurred
+    /// @param networkChainId The network and chain ID of the transaction in the format <network>:<chain-id>
     struct TransactionData {
-        bytes32 txHash;
-        uint256 chainId;
+        string txHash;
+        string networkChainId;
     }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
@@ -307,7 +311,9 @@ contract CUBE is
 
         // Iterate over all the transactions in the mint request and emit events
         for (uint256 i = 0; i < data.transactions.length;) {
-            emit CubeTransaction(tokenId, data.transactions[i].txHash, data.transactions[i].chainId);
+            emit CubeTransaction(
+                tokenId, data.transactions[i].txHash, data.transactions[i].networkChainId
+            );
             unchecked {
                 ++i;
             }
@@ -462,7 +468,11 @@ contract CUBE is
     /// @param transaction The TransactionData struct to be encoded
     /// @return A byte array representing the encoded transaction data
     function _encodeTx(TransactionData calldata transaction) internal pure returns (bytes memory) {
-        return abi.encode(TX_DATA_HASH, transaction.txHash, transaction.chainId);
+        return abi.encode(
+            TX_DATA_HASH,
+            _encodeString(transaction.txHash),
+            _encodeString(transaction.networkChainId)
+        );
     }
 
     /// @notice Encodes an array of transaction data into a single bytes32 hash

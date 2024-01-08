@@ -31,7 +31,9 @@ contract CubeTest is Test {
         string walletProvider,
         string embedOrigin
     );
-    event CubeTransaction(uint256 indexed tokenId, bytes32 indexed txHash, uint256 indexed chainId);
+    event CubeTransaction(
+        uint256 indexed cubeTokenId, string indexed txHash, string indexed networkChainId
+    );
 
     event TokenReward(
         uint256 indexed cubeTokenId,
@@ -176,7 +178,7 @@ contract CubeTest is Test {
         // Expecting CubeTransaction event to be emitted
         vm.expectEmit(true, true, true, true);
         emit CubeTransaction(
-            0, 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002, 137
+            0, "0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002", "137"
         );
 
         cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);

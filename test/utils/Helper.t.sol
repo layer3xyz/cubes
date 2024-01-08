@@ -51,8 +51,8 @@ contract Helper is CUBE {
     {
         CUBE.TransactionData[] memory transactions = new CUBE.TransactionData[](1);
         transactions[0] = CUBE.TransactionData({
-            txHash: 0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002,
-            chainId: 137
+            txHash: "0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002",
+            networkChainId: "137"
         });
 
         CUBE.RewardData memory reward = CUBE.RewardData({
