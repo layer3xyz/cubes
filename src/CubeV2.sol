@@ -57,7 +57,6 @@ contract CubeV2 is
     error CUBE__ExceedsContractBalance();
 
     uint256 internal s_nextTokenId;
-    uint256 internal s_questCompletionIdCounter;
     bool public s_isMintingActive;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER");
@@ -289,52 +288,47 @@ contract CubeV2 is
 
     /// @notice Internal function to handle the logic of minting a single cube
     /// @dev Verifies the signer, handles nonce, transactions, referral payments, and minting.
-    /// @param _data The CubeData containing details of the minting
-    /// @param _signature The signature for verification
-    function _mintCube(CubeData calldata _data, bytes calldata _signature) internal {
+    /// @param data The CubeData containing details of the minting
+    /// @param signature The signature for verification
+    function _mintCube(CubeData calldata data, bytes calldata signature) internal {
         // Cache the tokenId
         uint256 tokenId = s_nextTokenId;
 
         // Validate the signature to ensure the mint request is authorized
-        _validateSignature(_data, _signature);
+        _validateSignature(data, signature);
 
         // Iterate over all the transactions in the mint request and emit events
-        for (uint256 i = 0; i < _data.transactions.length;) {
-            emit CubeTransaction(
-                s_questCompletionIdCounter,
-                _data.transactions[i].txHash,
-                _data.transactions[i].chainId
-            );
+        for (uint256 i = 0; i < data.transactions.length;) {
+            emit CubeTransaction(tokenId, data.transactions[i].txHash, data.transactions[i].chainId);
             unchecked {
                 ++i;
             }
         }
 
         // Set the token URI for the CUBE
-        s_tokenURIs[tokenId] = _data.tokenURI;
+        s_tokenURIs[tokenId] = data.tokenURI;
 
         // Increment the counters for quest completion, issue numbers, and token IDs
         unchecked {
-            ++s_questCompletionIdCounter;
-            ++s_questIssueNumbers[_data.questId];
+            ++s_questIssueNumbers[data.questId];
             ++s_nextTokenId;
         }
 
         // Process any payouts to fee recipients if applicable
-        if (_data.recipients.length > 0) {
-            _processPayouts(_data);
+        if (data.recipients.length > 0) {
+            _processPayouts(data);
         }
         // Perform the actual minting of the CUBE
-        _safeMint(_data.toAddress, tokenId);
+        _safeMint(data.toAddress, tokenId);
 
         // Emit an event indicating a CUBE has been claimed
         emit CubeClaim(
-            _data.questId,
+            data.questId,
             tokenId,
-            s_questIssueNumbers[_data.questId],
-            _data.userId,
-            _data.walletProvider,
-            _data.embedOrigin
+            s_questIssueNumbers[data.questId],
+            data.userId,
+            data.walletProvider,
+            data.embedOrigin
         );
     }
 
