@@ -11,8 +11,19 @@ snapshot :; forge snapshot --ffi
 
 NETWORK_ARGS := --rpc-url http://localhost:8545 --private-key $(DEFAULT_ANVIL_PRIVATE_KEY) --broadcast
 
+# Goerli
 ifeq ($(findstring --network goerli,$(ARGS)),--network goerli)
-	NETWORK_ARGS := --rpc-url $(RPC_ENDPOINT) --private-key $(PRIVATE_KEY) --verify --etherscan-api-key $(ETHERSCAN_API_KEY) --broadcast -vvvv
+	NETWORK_ARGS := --rpc-url $(GOERLI_RPC_ENDPOINT) --private-key $(PRIVATE_KEY) --verify --etherscan-api-key $(ETHERSCAN_API_KEY) --broadcast -vvvv
+endif
+
+# Base
+ifeq ($(findstring --network base,$(ARGS)),--network base)
+	NETWORK_ARGS := --rpc-url $(BASE_RPC_ENDPOINT) --private-key $(PRIVATE_KEY) --verify --etherscan-api-key $(BASESCAN_API_KEY) --broadcast -vvvv
+endif
+
+# Base Sepolia
+ifeq ($(findstring --network base_sepolia,$(ARGS)),--network base_sepolia)
+	NETWORK_ARGS := --rpc-url $(BASE_SEPOLIA_RPC_ENDPOINT) --private-key $(PRIVATE_KEY) --verify --etherscan-api-key $(BASESCAN_API_KEY) --broadcast -vvvv
 endif
 
 deploy:

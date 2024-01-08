@@ -635,13 +635,42 @@ contract CubeTest is Test {
         assert(supportsInterface == true);
     }
 
-    function testRevokeAdminRole() public {
+    function testRevokeSignerRole() public {
         bytes32 signerRole = keccak256("SIGNER");
         bool isSigner = cubeContract.hasRole(signerRole, adminAddress);
         assertEq(isSigner, true);
 
         vm.prank(adminAddress);
         cubeContract.renounceRole(signerRole, adminAddress);
+    }
+
+    function testRevokeAdminRole() public {
+        bool isAdmin = cubeContract.hasRole(cubeContract.DEFAULT_ADMIN_ROLE(), ownerPubKey);
+        assertEq(isAdmin, true);
+
+        vm.startPrank(ownerPubKey);
+        cubeContract.grantRole(cubeContract.DEFAULT_ADMIN_ROLE(), adminAddress);
+        cubeContract.revokeRole(cubeContract.DEFAULT_ADMIN_ROLE(), ownerPubKey);
+
+        bool isAdmin2 = cubeContract.hasRole(cubeContract.DEFAULT_ADMIN_ROLE(), adminAddress);
+        assertEq(isAdmin2, true);
+        vm.stopPrank();
+    }
+
+    function testRotateAdmin() public {
+        bool isAdmin = cubeContract.hasRole(cubeContract.DEFAULT_ADMIN_ROLE(), ownerPubKey);
+        assertEq(isAdmin, true);
+
+        vm.startPrank(ownerPubKey);
+        cubeContract.grantRole(cubeContract.DEFAULT_ADMIN_ROLE(), ALICE);
+
+        bool isAdmin2 = cubeContract.hasRole(cubeContract.DEFAULT_ADMIN_ROLE(), ALICE);
+        assertEq(isAdmin2, true);
+
+        cubeContract.renounceRole(cubeContract.DEFAULT_ADMIN_ROLE(), ownerPubKey);
+        bool isAdmin3 = cubeContract.hasRole(cubeContract.DEFAULT_ADMIN_ROLE(), ownerPubKey);
+        assertEq(isAdmin3, false);
+        vm.stopPrank();
     }
 
     function testGrantDefaultAdminRole() public {
