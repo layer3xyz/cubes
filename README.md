@@ -8,36 +8,36 @@
 
 # CUBE Project Description
 
-At Layer3, users can complete different quests (different questions about the web3 landscape, or actions to be made on different chains). When completing a quest, some of them allows users to mint a CUBE. A CUBE is an NFT containing all sorts of data related to the completed quest. An example of a quest can be seen here on Opensea (goerli testnet): [https://testnets.opensea.io/assets/goerli/0x97024f5be3f5406a36515254910b9655c69f16ce/55](https://testnets.opensea.io/assets/goerli/0x97024f5be3f5406a36515254910b9655c69f16ce/55)
+At Layer3, users can complete different quests (different questions about the web3 landscape, or actions to be made on different chains). When completing a quest, some of them allows users to mint a CUBE. A CUBE is an NFT containing all sorts of data related to the completed quest. An example of a quest can be seen here on Opensea: [https://opensea.io/assets/base/0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7/95](https://opensea.io/assets/base/0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7/95)
 
-When minting a cube, we have an admin wallet in our backend that signs an EIP712 message with the cube data that is needed to mint a cube (the function `mintCubes`). The user is then the one sending the transaction, pays for gas and also a minting fee which is set in our backend. Once they have sent the transaction, they wait for the transaction to be mined and then they see the UI updating with their freshly minted CUBE. Currently, there's no immediate utility behind a CUBE, but this might change in the future.
+When minting a CUBE, an EIP712 message is signed in the Layer3 app, containing all CUBE data related to the quest that is needed to perform the minting (the function `mintCubes`). The user then sends the transaction with this signature and data. Currently, there's no immediate utility behind a CUBE, but this might change in the future.
 
-Other than having a cool NFT as a proof that you completed a quest, the minting transaction emit events in the smart contract and we catch these in Dune Analytics. Displaying this data is important and a big part of the CUBE smart contract, since it adds concrete numbers on user base, engagement and more importantly it gives users provenance on chain.
+Other than having a cool NFT as a proof that you completed a quest, the minting transaction emit events in the smart contract which are caught by Dune Analytics. Displaying this data is important and a big part of the CUBE smart contract, since it adds concrete numbers on user base, engagement and more importantly it gives users provenance on chain.
 
-When a quest is created in our backend (currently only supported by Layer3 admins), the function `initializeQuest` is called. The only purpose of this function is to emit event data about the quest, such as what communities are involved (Layer3, Uniswap, 1Inch etc.), together with showing the difficulty of the quest (beginner, intermediate, advanced), title and so on.
+When a quest is created in our backend, the function `initializeQuest` is called. The only purpose of this function is to emit event data about the quest, such as what communities are involved (e.g. Layer3, Uniswap, 1Inch), together with showing the difficulty of the quest (beginner, intermediate, advanced), title etc.
 
 ## Smart Contract Overview
 
 ### Key Features
 
-- Quest Completion and CUBE Minting: Users complete quests and mint CUBEs as proof of their achievements.
-- EIP712 Signatures: Utilizes EIP712 for secure signing of transactions.
+- Quest Completion and CUBE Minting: Users complete quests and mint CUBEs as a proof of their achievements.
+- EIP712 Signatures: Utilizes EIP712 to sign data.
 - Dune Analytics Integration: Events emitted by the contract are captured for analytics, providing insights into user engagement and activity.
 - Referral System: Incorporates a referral mechanism in the minting process.
 
 ### Contract Specification
 
-- Deploying Network: Base/OP Mainnet
 - Contract Name: CUBE
-- Version: 0.8.20 (paris)
+- Version: 0.8.20 (Paris)
 - Optimizations: Yes, 10,000 runs.
 - License: MIT
 - Upgradeable: Yes, using OpenZeppelin's UUPSUpgradeable pattern.
 
 ### Roles and Permissions
 
-- Admin: Full control over the contract, including upgrading and setting token URIs.
+- Default Admin: Full control over the contract, including upgrading and setting token URIs.
 - Signer: Authorized to initialize quests and sign cube data for minting.
+- Upgrader: Can upgrade the contract
 
 ## Diagrams
 
