@@ -8,7 +8,6 @@ import {DevOpsTools} from "lib/foundry-devops/src/DevOpsTools.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract UpgradeCube is Script {
-    // private key is the same for everyone
     uint256 public DEFAULT_ANVIL_PRIVATE_KEY =
         0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
     uint256 public deployerKey;
