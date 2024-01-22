@@ -31,9 +31,7 @@ contract CubeTest is Test {
         string walletProvider,
         string embedOrigin
     );
-    event CubeTransaction(
-        uint256 indexed cubeTokenId, string indexed txHash, string indexed networkChainId
-    );
+    event CubeTransaction(uint256 indexed cubeTokenId, string txHash, string networkChainId);
 
     event TokenReward(
         uint256 indexed cubeTokenId,

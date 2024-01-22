@@ -123,9 +123,7 @@ contract CUBE is
     /// @param cubeTokenId The token ID of the Cube
     /// @param txHash The hash of the transaction
     /// @param networkChainId The network and chain ID of the transaction in the format <network>:<chain-id>
-    event CubeTransaction(
-        uint256 indexed cubeTokenId, string indexed txHash, string indexed networkChainId
-    );
+    event CubeTransaction(uint256 indexed cubeTokenId, string txHash, string networkChainId);
 
     /// @notice Emitted when there is a reward associated with a CUBE
     /// @param cubeTokenId The token ID of the CUBE giving the reward
