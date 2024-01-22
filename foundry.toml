@@ -11,11 +11,14 @@ remappings = [
 solc_version = "0.8.20"
 optimizer = true
 optimizer_runs = 10000
-# NOTE: doesn't work with `forge coverage`
+# NOTE: viaIR doesn't work with `forge coverage`
 #viaIR = true
 build_info = true
 extra_output = ["storageLayout"]
 
+[etherscan]
+8453 = { key = "${BASESCAN_API_KEY}", url = "https://api.basescan.org/api" }
+84532 = { key = "${BASESCAN_API_KEY}", url = "https://api.basescan.org/api" }
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 [fmt]
