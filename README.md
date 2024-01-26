@@ -6,10 +6,6 @@
 \____/\____/_____/_____/
 ```
 
-[![Tests](https://github.com/layer3xyz/cubes/workflows/test.yml/badge.svg)](https://github.com/layer3xyz/cubes/actions?query=workflow%3Atest)
-
----
-
 ## Install
 
 ```bash
@@ -17,11 +13,19 @@ make install
 make build
 ```
 
-## Test
+### Deployment
+
+```bash
+make deploy_proxy ARGS="--network base_sepolia"
+```
+
+### Test
 
 ```bash
 make test
 ```
+
+## Description
 
 At Layer3, users can complete different quests (different questions about the web3 landscape, or actions to be made on different chains). When completing a quest, some of them allows users to mint a CUBE. A CUBE is an NFT containing all sorts of data related to the completed quest. An example of a quest can be seen [here on Opensea](https://opensea.io/assets/base/0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7/95).
 
@@ -53,8 +57,3 @@ When a quest is created in our backend, the function `initializeQuest` is called
 - Default Admin: Full control over the contract, including upgrading and setting token URIs.
 - Signer: Authorized to initialize quests and sign cube data for minting.
 - Upgrader: Can upgrade the contract
-
-## Diagrams
-
-![Solidity Visual Developer, CSV from draw.io](/draw_io.png)
-![Solidity Visual Developer, UML](/uml.png)
