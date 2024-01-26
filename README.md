@@ -6,9 +6,24 @@
 \____/\____/_____/_____/
 ```
 
-# CUBE Project Description
+[![Tests](https://github.com/layer3xyz/cubes/workflows/test.yml/badge.svg)](https://github.com/layer3xyz/cubes/actions?query=workflow%3Atest)
 
-At Layer3, users can complete different quests (different questions about the web3 landscape, or actions to be made on different chains). When completing a quest, some of them allows users to mint a CUBE. A CUBE is an NFT containing all sorts of data related to the completed quest. An example of a quest can be seen here on Opensea: [https://opensea.io/assets/base/0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7/95](https://opensea.io/assets/base/0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7/95)
+---
+
+## Install
+
+```bash
+make install
+make build
+```
+
+## Test
+
+```bash
+make test
+```
+
+At Layer3, users can complete different quests (different questions about the web3 landscape, or actions to be made on different chains). When completing a quest, some of them allows users to mint a CUBE. A CUBE is an NFT containing all sorts of data related to the completed quest. An example of a quest can be seen [here on Opensea](https://opensea.io/assets/base/0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7/95).
 
 When minting a CUBE, an EIP712 message is signed in the Layer3 app, containing all CUBE data related to the quest that is needed to perform the minting (the function `mintCubes`). The user then sends the transaction with this signature and data. Currently, there's no immediate utility behind a CUBE, but this might change in the future.
 
