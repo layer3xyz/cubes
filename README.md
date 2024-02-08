@@ -99,7 +99,7 @@ In December 2023 [CUBE.sol](./src/CUBE.sol) was audited by Sherlock, with no iss
 | **Medium**     | Bugs that cause inconvenience or unexpected behavior, but with limited impact on the overall security and functionality.       | Contracts using excessive gas, causing inefficiency or denial of service without direct economic damage. | Up to 2.5 ETH  |
 | **Low**        | Non-critical issues that relate to best practices, code optimization, or failings that have a minor impact on user experience. | Sub-optimal contract performance, failure to meet standards or best practices without economic risk.     | Up to 0.5 ETH  |
 
-_Note: All bounties are at the discretion of the Layer3 team and will be awarded based on the severity, impact, and quality of the report. To claim a bounty, a detailed report including proof of concept is required. For submissions or inquiries, please email us at [hi@layer3.xyz](mailto:hi@layer3.xyz)._
+_Note: All bounties are at the discretion of the Layer3 team and will be awarded based on the severity, impact, and quality of the report. To claim a bounty, a detailed report including proof of concept is required. For submissions or inquiries, please email us at [security@layer3.xyz](mailto:security@layer3.xyz)._
 
 ---
 
