@@ -3,7 +3,7 @@ pragma solidity 0.8.20;
 
 import {Script} from "forge-std/Script.sol";
 import {CUBE} from "../src/CUBE.sol";
-import {CubeV2} from "../src/CubeV2.sol";
+import {CubeV2} from "../test/contracts/CubeV2.sol";
 import {DevOpsTools} from "lib/foundry-devops/src/DevOpsTools.sol";
 import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
@@ -17,7 +17,7 @@ contract UpgradeCube is Script {
         vm.startPrank(_admin);
         CUBE proxy = CUBE(payable(_proxyAddress));
 
-        Upgrades.upgradeProxy(_proxyAddress, "CubeV2.sol", abi.encodeCall(CubeV2.initializeV2, ()));
+        Upgrades.upgradeProxy(_proxyAddress, "CubeV2.sol", abi.encodeCall(CubeV2.initializeV2, (2)));
         vm.stopPrank();
         return address(proxy);
     }
