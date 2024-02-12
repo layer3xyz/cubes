@@ -6,7 +6,7 @@ import {UpgradeCube} from "../../script/UpgradeCube.s.sol";
 import {Test, console} from "forge-std/Test.sol";
 import {StdCheats} from "forge-std/StdCheats.sol";
 import {ERC1967Proxy} from "@openzeppelin/contracts/proxy/ERC1967/ERC1967Proxy.sol";
-import {CubeV2} from "../../src/CubeV2.sol";
+import {CubeV2} from "../contracts/CubeV2.sol";
 import {CUBE} from "../../src/CUBE.sol";
 
 contract DeployAndUpgradeTest is StdCheats, Test {
