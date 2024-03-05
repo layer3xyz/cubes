@@ -3,9 +3,9 @@ src = "src"
 out = "out"
 libs = ["lib"]
 remappings = [
-  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/", 
-  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/", 
-  "erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests/", 
+  "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+  "erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests/",
   "openzeppelin-foundry-upgrades/=lib/openzeppelin-foundry-upgrades/src/"
 ]
 solc_version = "0.8.20"
@@ -24,15 +24,13 @@ extra_output = ["storageLayout"]
 [fmt]
 line_length = 100
 
-
-# stateless fuzz
-#[fuzz]
-#runs = 500
-
-# stateful fuzz
-#[invariant]
-#runs = 150
-#depth = 50
-#fail_on_revert = true
-
 gas_reports = ["*"]
+
+[fuzz]
+runs = 300
+seed = "0x1"
+
+[invariant]
+runs = 64
+depth = 32
+fail_on_revert = true

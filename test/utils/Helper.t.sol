@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.20;
 
+import {Vm} from "forge-std/Test.sol";
+
 import {CUBE} from "../../src/CUBE.sol";
+import {MockERC20} from "../mock/MockERC20.sol";
+import {MockERC721} from "../mock/MockERC721.sol";
+import {MockERC1155} from "../mock/MockERC1155.sol";
+
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
-import {Vm} from "forge-std/Test.sol";
 
 contract Helper is CUBE {
     using ECDSA for bytes32;
@@ -44,11 +49,17 @@ contract Helper is CUBE {
         return MessageHashUtils.toTypedDataHash(domainSeparator, structHash);
     }
 
-    function getTestCubeData(address _feeRecipient, address _mintTo)
-        public
-        pure
-        returns (CUBE.CubeData memory)
-    {
+    function getCubeData(
+        address _feeRecipient,
+        address _mintTo,
+        address factoryAddress,
+        address tokenAddress,
+        uint256 tokenId,
+        uint256 amount,
+        CUBE.TokenType tokenType,
+        uint256 rakeBps,
+        uint256 chainId
+    ) public pure returns (CUBE.CubeData memory) {
         CUBE.TransactionData[] memory transactions = new CUBE.TransactionData[](1);
         transactions[0] = CUBE.TransactionData({
             txHash: "0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002",
@@ -56,11 +67,13 @@ contract Helper is CUBE {
         });
 
         CUBE.RewardData memory reward = CUBE.RewardData({
-            tokenAddress: address(0),
-            chainId: 137,
-            amount: 5,
-            tokenId: 0,
-            tokenType: CUBE.TokenType.NATIVE
+            tokenAddress: tokenAddress,
+            chainId: chainId,
+            amount: amount,
+            tokenId: tokenId,
+            tokenType: tokenType,
+            rakeBps: rakeBps,
+            factoryAddress: factoryAddress
         });
 
         CUBE.FeeRecipient[] memory recipients = new CUBE.FeeRecipient[](1);
@@ -68,7 +81,7 @@ contract Helper is CUBE {
         return CUBE.CubeData({
             questId: 1,
             nonce: 1,
-            price: 10 ether,
+            price: 0.01 ether,
             toAddress: _mintTo,
             walletProvider: "MetaMask",
             tokenURI: "ipfs://abc",
@@ -77,6 +90,21 @@ contract Helper is CUBE {
             recipients: recipients,
             reward: reward
         });
+    }
+
+    function depositNativeToEscrow(address escrow, uint256 amount) public {
+        (bool success,) = address(escrow).call{value: amount}("");
+        require(success, "native deposit failed");
+    }
+
+    function depositERC20ToEscrow(uint256 amount, address to, MockERC20 erc20) public {
+        erc20.transfer(to, amount);
+    }
+
+    function depositERC721ToEscrow(address from, address to, uint256 tokenId, MockERC721 erc721)
+        public
+    {
+        erc721.safeTransferFrom(from, to, tokenId);
     }
 
     function processPayouts(CubeData calldata _data) public {

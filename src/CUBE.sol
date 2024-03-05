@@ -22,6 +22,8 @@ import {AccessControlUpgradeable} from
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {ReentrancyGuardUpgradeable} from
     "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import {IFactory} from "./escrow/interfaces/IFactory.sol";
+import {ITokenType} from "./escrow/interfaces/ITokenType.sol";
 
 /// @title CUBE
 /// @dev Implementation of an NFT smart contract with EIP712 signatures.
@@ -32,7 +34,8 @@ contract CUBE is
     AccessControlUpgradeable,
     UUPSUpgradeable,
     EIP712Upgradeable,
-    ReentrancyGuardUpgradeable
+    ReentrancyGuardUpgradeable,
+    ITokenType
 {
     using ECDSA for bytes32;
 
@@ -46,6 +49,7 @@ contract CUBE is
     error CUBE__BPSTooHigh();
     error CUBE__ExcessiveFeePayout();
     error CUBE__ExceedsContractBalance();
+    error CUBE__QuestNotActive();
 
     uint256 internal s_nextTokenId;
     bool public s_isMintingActive;
@@ -58,7 +62,7 @@ contract CUBE is
     bytes32 internal constant RECIPIENT_DATA_HASH =
         keccak256("FeeRecipient(address recipient,uint16 BPS)");
     bytes32 internal constant REWARD_DATA_HASH = keccak256(
-        "RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType)"
+        "RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress)"
     );
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
         "CubeData(uint256 questId,uint256 nonce,uint256 price,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType)TransactionData(string txHash,string networkChainId)"
@@ -67,6 +71,7 @@ contract CUBE is
     mapping(uint256 => uint256) internal s_questIssueNumbers;
     mapping(uint256 => string) internal s_tokenURIs;
     mapping(uint256 nonce => bool isConsumed) internal s_nonces;
+    mapping(uint256 => bool) internal s_quests;
 
     enum QuestType {
         QUEST,
@@ -77,13 +82,6 @@ contract CUBE is
         BEGINNER,
         INTERMEDIATE,
         ADVANCED
-    }
-
-    enum TokenType {
-        ERC20,
-        ERC721,
-        ERC1155,
-        NATIVE
     }
 
     /// @notice Emitted when a new quest is initialized
@@ -192,12 +190,16 @@ contract CUBE is
     /// @param amount The amount of the reward
     /// @param tokenId The token ID
     /// @param tokenType The token type
+    /// @param rakeBps The rake basis points
+    /// @param factoryAddress The escrow factory address
     struct RewardData {
         address tokenAddress;
         uint256 chainId;
         uint256 amount;
         uint256 tokenId;
         TokenType tokenType;
+        uint256 rakeBps;
+        address factoryAddress;
     }
 
     /// @dev Contains data about a specific transaction related to a CUBE
@@ -246,6 +248,10 @@ contract CUBE is
         override
         onlyRole(UPGRADER_ROLE)
     {}
+
+    function isQuestActive(uint256 questId) external view returns (bool) {
+        return s_quests[questId];
+    }
 
     /// @notice Retrieves the URI for a given token
     /// @dev Overrides the ERC721Upgradeable's tokenURI method.
@@ -307,6 +313,10 @@ contract CUBE is
         // Validate the signature to ensure the mint request is authorized
         _validateSignature(data, signature);
 
+        if (!s_quests[data.questId]) {
+            revert CUBE__QuestNotActive();
+        }
+
         // Iterate over all the transactions in the mint request and emit events
         for (uint256 i = 0; i < data.transactions.length;) {
             emit CubeTransaction(
@@ -344,6 +354,15 @@ contract CUBE is
         );
 
         if (data.reward.chainId != 0) {
+            IFactory(data.reward.factoryAddress).distributeRewards(
+                data.questId,
+                data.reward.tokenAddress,
+                data.toAddress,
+                data.reward.amount,
+                data.reward.tokenId,
+                data.reward.tokenType,
+                data.reward.rakeBps
+            );
             emit TokenReward(
                 tokenId,
                 data.reward.tokenAddress,
@@ -528,7 +547,9 @@ contract CUBE is
                 data.chainId,
                 data.amount,
                 data.tokenId,
-                data.tokenType
+                data.tokenType,
+                data.rakeBps,
+                data.factoryAddress
             )
         );
     }
@@ -566,7 +587,12 @@ contract CUBE is
         QuestType questType,
         string[] memory tags
     ) external onlyRole(SIGNER_ROLE) {
+        s_quests[questId] = true;
         emit QuestMetadata(questId, questType, difficulty, title, tags, communities);
+    }
+
+    function unpublishQuest(uint256 questId) external onlyRole(SIGNER_ROLE) {
+        s_quests[questId] = false;
     }
 
     /// @notice Checks if the contract implements an interface
