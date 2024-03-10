@@ -5,5 +5,6 @@
   },
   "solidity.formatter": "forge",
   "slither.solcPath": "",
-  "slither.hiddenDetectors": []
+  "slither.hiddenDetectors": [],
+  "security.olympix.project.includePath": "/src"
 }

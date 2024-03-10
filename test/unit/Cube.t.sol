@@ -980,6 +980,8 @@ contract CubeTest is Test {
     function testMultipleReferrers() public {
         CUBE.CubeData[] memory _data = _getCubeMintData();
 
+        uint256 preOwnerBalance = ownerPubKey.balance;
+
         CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
         bytes[] memory signatures = new bytes[](1);
 
@@ -1014,7 +1016,7 @@ contract CubeTest is Test {
         vm.prank(ownerPubKey);
         cubeContract.withdraw();
 
-        assertEq(ownerPubKey.balance, expectedMintProfit);
+        assertEq(ownerPubKey.balance - preOwnerBalance, expectedMintProfit);
         assertEq(proxyAddress.balance, 0);
     }
 

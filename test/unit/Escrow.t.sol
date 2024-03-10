@@ -101,8 +101,6 @@ contract EscrowTest is Test {
         uint256 preBalance = erc20Mock.balanceOf(escrowAddr);
 
         uint256 preBalanceAdmin = erc20Mock.balanceOf(adminAddress);
-        console.log("preBalanceAdmin ", preBalanceAdmin);
-        console.log("amount ", amount);
         if (amount > preBalanceAdmin) {
             return;
         }
@@ -232,6 +230,7 @@ contract EscrowTest is Test {
     function testWithdrawZeroToAddress() public {
         testDepositERC20(10e18);
         vm.prank(adminAddress);
+        vm.expectRevert();
         escrowMock.withdrawERC20(address(erc20Mock), address(0), 10, 300);
     }
 
@@ -335,13 +334,13 @@ contract EscrowTest is Test {
 
         bytes4 selector = bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)"));
         bytes memory expectedError =
-            abi.encodeWithSelector(selector, alice, escrowMock.ADMIN_ROLE());
+            abi.encodeWithSelector(selector, alice, escrowMock.DEFAULT_ADMIN_ROLE());
         vm.expectRevert(expectedError);
         escrowMock.addTokenToWhitelist(token);
         vm.stopBroadcast();
 
         vm.startBroadcast(adminAddress);
-        escrowMock.grantRole(escrowMock.ADMIN_ROLE(), alice);
+        escrowMock.grantRole(escrowMock.DEFAULT_ADMIN_ROLE(), alice);
         vm.stopBroadcast();
 
         vm.prank(alice);

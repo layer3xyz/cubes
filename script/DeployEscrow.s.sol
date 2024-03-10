@@ -14,6 +14,7 @@ import {CUBE} from "../src/CUBE.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/interfaces/IERC721.sol";
 import {IERC1155} from "@openzeppelin/contracts/interfaces/IERC1155.sol";
+import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 contract DeployEscrow is Script {
     // private key is the same for everyone
@@ -59,10 +60,12 @@ contract DeployEscrow is Script {
 
     function deployFactory(address _admin, address cube) public returns (address) {
         vm.startBroadcast(_admin);
-        Factory factory = new Factory(CUBE(cube), _admin); // insert rake address here?
+        address proxy = Upgrades.deployUUPSProxy(
+            "Factory.sol", abi.encodeCall(Factory.initialize, (CUBE(cube), _admin))
+        );
 
         vm.stopBroadcast();
-        return address(factory);
+        return proxy;
     }
 
     function deployEscrow(

@@ -1,4 +1,13 @@
-// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: Apache-2.0
+/*
+.____                             ________
+|    |   _____  ___.__. __________\_____  \
+|    |   \__  \<   |  |/ __ \_  __ \_(__  <
+|    |___ / __ \\___  \  ___/|  | \/       \
+|_______ (____  / ____|\___  >__| /______  /
+        \/    \/\/         \/            \/
+*/
+
 pragma solidity 0.8.20;
 
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
@@ -17,12 +26,8 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
     error Escrow__NativeRakeError();
     error Escrow__NativePayoutError();
 
-    event ERC20Transfer(
+    event EscrowERC20Transfer(
         address token, address to, uint256 amount, uint256 rake, address rakePayoutAddress
-    );
-    event ERC721Transfer(address indexed token, address indexed to, uint256 indexed tokenId);
-    event ERC1155Transfer(
-        address indexed token, address indexed to, uint256 indexed tokenId, uint256 amount
     );
     event NativeTransfer(
         address indexed to, uint256 indexed amount, uint256 indexed rake, address rakePayoutAddress
@@ -43,11 +48,14 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
         _;
     }
 
+    /// @notice Initializes the escrow contract with specified admin, whitelisted tokens, and treasury address.
+    /// @param admin The address to be given the default admin role.
+    /// @param tokenAddr An array of addresses of tokens to whitelist upon initialization.
+    /// @param treasury The address of the treasury for receiving rake payments.
     constructor(address admin, address[] memory tokenAddr, address treasury) {
         s_owner = msg.sender;
         i_treasury = treasury;
 
-        _grantRole(ADMIN_ROLE, admin);
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
 
         for (uint256 i = 0; i < tokenAddr.length;) {
@@ -58,26 +66,35 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
         }
     }
 
+    /// @notice Changes the owner of the escrow.
+    /// @param newOwner The address of the new owner.
     function changeOwner(address newOwner) external onlyOwner {
         s_owner = newOwner;
     }
 
-    function addTokenToWhitelist(address token) external onlyRole(ADMIN_ROLE) {
+    /// @notice Adds a token to the whitelist, allowing it to be used in the escrow.
+    /// @param token The address of the token to whitelist.
+    function addTokenToWhitelist(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
         s_whitelistedTokens[token] = true;
     }
 
-    function removeTokenFromWhitelist(address token) external onlyRole(ADMIN_ROLE) {
+    /// @notice Removes a token from the whitelist.
+    /// @param token The address of the token to remove from the whitelist.
+    function removeTokenFromWhitelist(address token) external onlyRole(DEFAULT_ADMIN_ROLE) {
         s_whitelistedTokens[token] = false;
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////
-    //////////////////////////////// VIEW FUNCTIONS ////////////////////////////////////
-    ////////////////////////////////////////////////////////////////////////////////////
-
+    /// @notice Returns the ERC20 token balance held in escrow.
+    /// @param token The address of the token.
+    /// @return The balance of the specified token held in escrow.
     function escrowERC20Reserves(address token) external view returns (uint256) {
         return IERC20(token).balanceOf(address(this));
     }
 
+    /// @notice Returns the ERC1155 token balance held in escrow for a specific tokenId.
+    /// @param token The address of the token.
+    /// @param tokenId The ID of the token.
+    /// @return The balance of the specified token ID held in escrow.
     function escrowERC1155Reserves(address token, uint256 tokenId)
         external
         view
@@ -86,10 +103,22 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
         return IERC1155(token).balanceOf(address(this), tokenId);
     }
 
-    ////////////////////////////////////////////////////////////////////////////////////
-    //////////////////////////////// WITHDRAWALS ///////////////////////////////////////
-    ////////////////////////////////////////////////////////////////////////////////////
+    /// @notice Returns the native balance of the escrow smart contract
+    function escrowNativeBalance() external view returns (uint256) {
+        return address(this).balance;
+    }
 
+    /// @notice Returns the ERC721 token balance held in escrow.
+    function escrowERC721BalanceOf(address token) external view returns (uint256) {
+        return IERC721(token).balanceOf(address(this));
+    }
+
+    /// @notice Withdraws ERC20 tokens from the escrow to a specified address.
+    /// @dev Can only be called by the owner. Applies a rake before sending to the recipient.
+    /// @param token The token address.
+    /// @param to The recipient address.
+    /// @param amount The amount to withdraw.
+    /// @param rakeBps The basis points of the total amount to be taken as rake.
     function withdrawERC20(address token, address to, uint256 amount, uint256 rakeBps)
         external
         onlyOwner
@@ -107,7 +136,7 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
         _rakePayoutERC20(token, rake);
 
         _safeTransferERC20(token, to, amount - rake);
-        emit ERC20Transfer(token, to, amount, rake, i_treasury);
+        emit EscrowERC20Transfer(token, to, amount, rake, i_treasury);
     }
 
     function _rakePayoutERC20(address token, uint256 amount) internal {
@@ -120,15 +149,24 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
         require(success && (data.length == 0 || abi.decode(data, (bool))), "transfer failed");
     }
 
+    /// @notice Withdraws ERC721 tokens from the escrow to a specified address.
+    /// @dev Can only be called by the owner.
+    /// @param token The token address.
+    /// @param to The recipient address.
+    /// @param tokenId The token ID to withdraw.
     function withdrawERC721(address token, address to, uint256 tokenId) external onlyOwner {
         if (!s_whitelistedTokens[token]) {
             revert Escrow__TokenNotWhitelisted();
         }
         IERC721(token).safeTransferFrom(address(this), to, tokenId);
-
-        emit ERC721Transfer(token, to, tokenId);
     }
 
+    /// @notice Withdraws ERC1155 tokens from the escrow to a specified address.
+    /// @dev Can only be called by the owner.
+    /// @param token The token address.
+    /// @param to The recipient address.
+    /// @param amount The amount to withdraw.
+    /// @param tokenId The token ID to withdraw.
     function withdrawERC1155(address token, address to, uint256 amount, uint256 tokenId)
         external
         onlyOwner
@@ -138,11 +176,15 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
         }
 
         IERC1155(token).safeTransferFrom(address(this), to, tokenId, amount, "0x00");
-        emit ERC1155Transfer(token, to, tokenId, amount);
     }
 
+    /// @notice Withdraws native tokens from the escrow to a specified address.
+    /// @dev Can only be called by the owner.
+    /// @param to The recipient address.
+    /// @param amount The amount to withdraw.
+    /// @param rakeBps The basis points of the total amount to be taken as rake.
     function withdrawNative(address to, uint256 amount, uint256 rakeBps) external onlyOwner {
-        if (amount > address(this).balance) {
+        if (amount > this.escrowNativeBalance()) {
             revert Escrow__InsufficientEscrowBalance();
         }
         if (to == address(0)) {

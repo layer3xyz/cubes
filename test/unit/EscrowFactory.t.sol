@@ -4,6 +4,7 @@ pragma solidity 0.8.20;
 import {DeployProxy} from "../../script/DeployProxy.s.sol";
 import {DeployEscrow} from "../../script/DeployEscrow.s.sol";
 import {CUBE} from "../../src/CUBE.sol";
+import {CubeV2} from "../contracts/CubeV2.sol";
 
 import {MockERC20} from "../mock/MockERC20.sol";
 import {MockERC721} from "../mock/MockERC721.sol";
@@ -14,6 +15,7 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import {Upgrades} from "openzeppelin-foundry-upgrades/Upgrades.sol";
 
 import {Escrow} from "../../src/escrow/Escrow.sol";
 import {Factory} from "../../src/escrow/Factory.sol";
@@ -90,13 +92,17 @@ contract EscrowFactoryTest is Test {
         whitelistedTokens.push(address(_erc721Mock));
         whitelistedTokens.push(address(_erc1155Mock));
 
-        factoryContract = new Factory(cubeContract, adminAddress);
+        factoryAddr = deployer.deployFactory(adminAddress, proxyAddress);
+        factoryContract = Factory(payable(factoryAddr));
+
+        bool hasRole = factoryContract.hasRole(factoryContract.DEFAULT_ADMIN_ROLE(), adminAddress);
+        assert(hasRole);
 
         uint256 questId = 0;
-        vm.prank(adminAddress);
+        vm.startPrank(adminAddress);
         factoryContract.createEscrow(questId, adminAddress, whitelistedTokens, treasury);
+        vm.stopPrank();
 
-        factoryAddr = address(factoryContract);
         escrowAddr = factoryContract.s_escrows(questId);
         escrowMock = Escrow(payable(escrowAddr));
 
@@ -181,6 +187,7 @@ contract EscrowFactoryTest is Test {
     }
 
     function testCreateEscrow(uint256 questId, uint256 amount) public {
+        questId = bound(questId, 1, type(uint256).max); // 0 is already used in setUp()
         vm.prank(adminAddress);
         factoryContract.createEscrow(questId, adminAddress, whitelistedTokens, treasury);
         address newEscrow = factoryContract.s_escrows(questId);
@@ -360,5 +367,17 @@ contract EscrowFactoryTest is Test {
         hoax(ALICE, amount);
         (bool success,) = factoryAddr.call{value: amount}("some data");
         assert(!success);
+    }
+
+    function testUpgrade() public {
+        uint256 newValue = 2;
+        vm.startPrank(adminAddress);
+        Upgrades.upgradeProxy(
+            factoryAddr, "CubeV2.sol", abi.encodeCall(CubeV2.initializeV2, (newValue))
+        );
+        CubeV2 cubeV2 = CubeV2(factoryAddr);
+        uint256 value = cubeV2.newValueV2();
+        assertEq(value, newValue);
+        vm.stopPrank();
     }
 }

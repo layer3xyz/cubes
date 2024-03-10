@@ -2,6 +2,7 @@
 pragma solidity 0.8.20;
 
 import {ITokenType} from "./ITokenType.sol";
+import {CUBE} from "../../CUBE.sol";
 
 interface IFactory is ITokenType {
     function distributeRewards(
@@ -12,7 +13,7 @@ interface IFactory is ITokenType {
         uint256 rewardTokenId,
         TokenType tokenType,
         uint256 rakeBps
-    ) external returns (bool success);
+    ) external;
 
     function withdrawFunds(
         uint256 questId,
@@ -30,4 +31,6 @@ interface IFactory is ITokenType {
         address[] memory whitelistedTokens,
         address treasury
     ) external;
+
+    function initialize(CUBE cube, address admin) external;
 }

@@ -152,6 +152,8 @@ contract CUBE is
     /// @param amount The contract's balance that was withdrawn
     event ContractWithdrawal(uint256 amount);
 
+    event QuestDisabled(uint256 indexed questId);
+
     /// @dev Represents the data needed for minting a CUBE.
     /// @param questId The ID of the quest associated with the CUBE
     /// @param nonce A unique number to prevent replay attacks
@@ -313,7 +315,7 @@ contract CUBE is
         // Validate the signature to ensure the mint request is authorized
         _validateSignature(data, signature);
 
-        if (!s_quests[data.questId]) {
+        if (!this.isQuestActive(data.questId)) {
             revert CUBE__QuestNotActive();
         }
 
@@ -593,6 +595,7 @@ contract CUBE is
 
     function unpublishQuest(uint256 questId) external onlyRole(SIGNER_ROLE) {
         s_quests[questId] = false;
+        emit QuestDisabled(questId);
     }
 
     /// @notice Checks if the contract implements an interface
