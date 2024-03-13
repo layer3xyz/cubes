@@ -32,5 +32,5 @@ interface IFactory is ITokenType {
         address treasury
     ) external;
 
-    function initialize(CUBE cube, address admin) external;
+    function initialize(address admin) external;
 }

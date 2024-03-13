@@ -25,8 +25,10 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
     error Factory__NoQuestEscrowFound();
     error Factory__OnlyCallableByEscrowAdmin();
     error Factory__EscrowAlreadyExists();
+    error Factory__ZeroAddress();
 
-    CUBE public s_cube;
+    /// @custom:oz-upgrades-unsafe-allow state-variable-immutable
+    CUBE public immutable i_cube;
     mapping(uint256 => address) public s_escrows;
     mapping(uint256 => address) public s_escrow_admin;
 
@@ -50,22 +52,24 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         uint8 tokenType,
         uint256 questId
     );
+    event EscrowAdminUpdated(
+        address indexed updater, uint256 indexed questId, address indexed newAdmin
+    );
 
     /// @custom:oz-upgrades-unsafe-allow constructor
-    constructor() {
+    constructor(CUBE cube) {
+        i_cube = cube;
         _disableInitializers();
     }
 
     /**
      * @notice Initializes the contract by setting up roles and linking to the CUBE contract.
-     * @param cube Address of the CUBE contract.
      * @param admin Address to be granted the default admin role.
      */
-    function initialize(CUBE cube, address admin) external initializer {
+    function initialize(address admin) external override initializer {
         __AccessControl_init();
         __UUPSUpgradeable_init();
 
-        s_cube = cube;
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
 
@@ -75,11 +79,15 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
      * @param questId Identifier of the quest associated with the escrow.
      * @param newAdmin Address of the new admin.
      */
-    function updateEscrowAdmin(uint256 questId, address newAdmin) external {
+    function updateEscrowAdmin(uint256 questId, address newAdmin) external override {
         if (s_escrow_admin[questId] != msg.sender) {
             revert Factory__OnlyCallableByEscrowAdmin();
         }
+        if (newAdmin == address(0)) {
+            revert Factory__ZeroAddress();
+        }
         s_escrow_admin[questId] = newAdmin;
+        emit EscrowAdminUpdated(msg.sender, questId, newAdmin);
     }
 
     /**
@@ -93,9 +101,9 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
     function createEscrow(
         uint256 questId,
         address admin,
-        address[] memory whitelistedTokens,
+        address[] calldata whitelistedTokens,
         address treasury
-    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    ) external override onlyRole(DEFAULT_ADMIN_ROLE) {
         if (s_escrows[questId] != address(0)) {
             revert Factory__EscrowAlreadyExists();
         }
@@ -122,9 +130,9 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         address token,
         uint256 tokenId,
         TokenType tokenType
-    ) external {
+    ) external override {
         // make sure quest is inactive
-        if (s_cube.isQuestActive(questId)) {
+        if (i_cube.isQuestActive(questId)) {
             revert Factory__CUBEQuestNotActive();
         }
         address escrow = s_escrows[questId];
@@ -138,22 +146,24 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         }
 
         if (tokenType == TokenType.NATIVE) {
-            IEscrow(escrow).withdrawNative(to, escrow.balance, 0);
-            emit EscrowWithdrawal(msg.sender, to, address(0), 0, escrow.balance, 0, questId);
-        }
-        if (tokenType == TokenType.ERC20) {
+            uint256 escrowBalance = escrow.balance;
+            IEscrow(escrow).withdrawNative(to, escrowBalance, 0);
+            emit EscrowWithdrawal(
+                msg.sender, to, address(0), 0, escrowBalance, uint8(tokenType), questId
+            );
+        } else if (tokenType == TokenType.ERC20) {
             uint256 erc20Amount = IEscrow(escrow).escrowERC20Reserves(token);
             IEscrow(escrow).withdrawERC20(token, to, erc20Amount, 0);
-            emit EscrowWithdrawal(msg.sender, to, token, 0, erc20Amount, 1, questId);
-        }
-        if (tokenType == TokenType.ERC721) {
+            emit EscrowWithdrawal(msg.sender, to, token, 0, erc20Amount, uint8(tokenType), questId);
+        } else if (tokenType == TokenType.ERC721) {
             IEscrow(escrow).withdrawERC721(token, to, tokenId);
-            emit EscrowWithdrawal(msg.sender, to, token, tokenId, 1, 2, questId);
-        }
-        if (tokenType == TokenType.ERC1155) {
+            emit EscrowWithdrawal(msg.sender, to, token, tokenId, 1, uint8(tokenType), questId);
+        } else if (tokenType == TokenType.ERC1155) {
             uint256 erc1155Amount = IEscrow(escrow).escrowERC1155Reserves(token, tokenId);
             IEscrow(escrow).withdrawERC1155(token, to, tokenId, erc1155Amount);
-            emit EscrowWithdrawal(msg.sender, to, token, tokenId, erc1155Amount, 3, questId);
+            emit EscrowWithdrawal(
+                msg.sender, to, token, tokenId, erc1155Amount, uint8(tokenType), questId
+            );
         }
     }
 
@@ -176,26 +186,27 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         uint256 rewardTokenId,
         TokenType tokenType,
         uint256 rakeBps
-    ) external {
-        if (msg.sender != address(s_cube)) {
+    ) external override {
+        if (msg.sender != address(i_cube)) {
             revert Factory__OnlyCallableByCUBE();
+        }
+        address escrow = s_escrows[questId];
+        if (escrow == address(0)) {
+            revert Factory__NoQuestEscrowFound();
         }
 
         if (tokenType == TokenType.NATIVE) {
-            IEscrow(s_escrows[questId]).withdrawNative(to, amount, rakeBps);
-            emit TokenPayout(to, address(0), 0, amount, 0, questId);
-        }
-        if (tokenType == TokenType.ERC20) {
-            IEscrow(s_escrows[questId]).withdrawERC20(token, to, amount, rakeBps);
-            emit TokenPayout(to, token, 0, amount, 1, questId);
-        }
-        if (tokenType == TokenType.ERC721) {
-            IEscrow(s_escrows[questId]).withdrawERC721(token, to, rewardTokenId);
-            emit TokenPayout(to, token, rewardTokenId, 1, 2, questId);
-        }
-        if (tokenType == TokenType.ERC1155) {
-            IEscrow(s_escrows[questId]).withdrawERC1155(token, to, amount, rewardTokenId);
-            emit TokenPayout(to, token, rewardTokenId, amount, 3, questId);
+            IEscrow(escrow).withdrawNative(to, amount, rakeBps);
+            emit TokenPayout(to, address(0), 0, amount, uint8(tokenType), questId);
+        } else if (tokenType == TokenType.ERC20) {
+            IEscrow(escrow).withdrawERC20(token, to, amount, rakeBps);
+            emit TokenPayout(to, token, 0, amount, uint8(tokenType), questId);
+        } else if (tokenType == TokenType.ERC721) {
+            IEscrow(escrow).withdrawERC721(token, to, rewardTokenId);
+            emit TokenPayout(to, token, rewardTokenId, 1, uint8(tokenType), questId);
+        } else if (tokenType == TokenType.ERC1155) {
+            IEscrow(escrow).withdrawERC1155(token, to, amount, rewardTokenId);
+            emit TokenPayout(to, token, rewardTokenId, amount, uint8(tokenType), questId);
         }
     }
 

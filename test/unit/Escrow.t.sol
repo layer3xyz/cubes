@@ -280,7 +280,7 @@ contract EscrowTest is Test {
         uint256 rakeBps = 10_001; // 10k (100% in bps) is max, make it overflow
         vm.startBroadcast(adminAddress);
 
-        vm.expectRevert(stdError.arithmeticError);
+        vm.expectRevert(Escrow.Escrow__InvalidRakeBps.selector);
         escrowMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
         vm.stopBroadcast();
     }
@@ -429,5 +429,6 @@ contract EscrowTest is Test {
     function depositNativeToEscrow() public {
         hoax(adminAddress, 50 ether);
         (bool success,) = payable(escrowAddr).call{value: 10 ether}("");
+        assert(success);
     }
 }

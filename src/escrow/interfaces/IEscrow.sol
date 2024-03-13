@@ -12,7 +12,10 @@ interface IEscrow {
         external
         view
         returns (uint256);
+    function escrowERC721BalanceOf(address token) external view returns (uint256);
+    function escrowNativeBalance() external view returns (uint256);
 
     function addTokenToWhitelist(address token) external;
+    function removeTokenFromWhitelist(address token) external;
     function changeOwner(address newOwner) external;
 }
