@@ -242,6 +242,9 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
         if (to == address(0)) {
             revert Escrow__ZeroAddress();
         }
+        if (rakeBps > MAX_BPS) {
+            revert Escrow__InvalidRakeBps();
+        }
 
         // rake payment
         uint256 rake = amount * rakeBps / MAX_BPS;
