@@ -22,7 +22,6 @@ import {IEscrow} from "./interfaces/IEscrow.sol";
 contract Escrow is IEscrow, ERC721Holder, ERC1155Holder, Ownable2Step {
     error Escrow__TokenNotWhitelisted();
     error Escrow__InsufficientEscrowBalance();
-    error Escrow__MustBeOwner();
     error Escrow__ZeroAddress();
     error Escrow__NativeRakeError();
     error Escrow__NativePayoutError();
@@ -44,7 +43,6 @@ contract Escrow is IEscrow, ERC721Holder, ERC1155Holder, Ownable2Step {
         address indexed token, address indexed to, uint256 amount, uint256 tokenId
     );
     event EscrowERC721Transfer(address indexed token, address indexed to, uint256 tokenId);
-    event OwnerChanged(address indexed oldOwner, address indexed newOwner);
     event TokenWhitelisted(address indexed token);
     event TokenRemovedFromWhitelist(address indexed token);
 
@@ -53,6 +51,7 @@ contract Escrow is IEscrow, ERC721Holder, ERC1155Holder, Ownable2Step {
     address public immutable i_treasury;
 
     uint16 constant MAX_BPS = 10_000;
+    uint16 constant GAS_CAP = 35_000;
 
     mapping(address => bool) public s_whitelistedTokens;
 
@@ -159,7 +158,7 @@ contract Escrow is IEscrow, ERC721Holder, ERC1155Holder, Ownable2Step {
         }
         (bool success, bytes memory data) =
             token.call(abi.encodeWithSelector(TRANSFER_ERC20, to, value));
-        if (!success || (data.length > 0 && abi.decode(data, (bool)) == false)) {
+        if (!success || (data.length > 0 && !abi.decode(data, (bool)))) {
             revert Escrow__ERC20TransferFailed();
         }
     }
@@ -229,7 +228,7 @@ contract Escrow is IEscrow, ERC721Holder, ERC1155Holder, Ownable2Step {
             }
         }
 
-        (bool rewardSuccess,) = payable(to).call{value: amount - rake}("");
+        (bool rewardSuccess,) = payable(to).call{value: amount - rake, gas: GAS_CAP}("");
         if (!rewardSuccess) {
             revert Escrow__NativePayoutError();
         }

@@ -55,8 +55,6 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
     event EscrowAdminUpdated(
         address indexed updater, uint256 indexed questId, address indexed newAdmin
     );
-    event TokenWhitelisted(address indexed token);
-    event TokenRemovedFromWhitelist(address indexed token);
 
     modifier onlyAdmin(uint256 questId) {
         if (msg.sender != s_escrow_admin[questId] && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
@@ -131,7 +129,6 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         }
 
         IEscrow(escrow).addTokenToWhitelist(token);
-        emit TokenWhitelisted(token);
     }
 
     /// @notice Removes a token from the whitelist.
@@ -147,7 +144,6 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         }
 
         IEscrow(escrow).removeTokenFromWhitelist(token);
-        emit TokenRemovedFromWhitelist(token);
     }
 
     /// @notice Withdraws funds from the escrow associated with a quest.
