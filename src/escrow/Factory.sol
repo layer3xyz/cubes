@@ -23,7 +23,7 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
     error Factory__OnlyCallableByCUBE();
     error Factory__CUBEQuestNotActive();
     error Factory__NoQuestEscrowFound();
-    error Factory__OnlyCallableByEscrowAdmin();
+    error Factory__OnlyCallableByAdmin();
     error Factory__EscrowAlreadyExists();
     error Factory__ZeroAddress();
 
@@ -55,6 +55,15 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
     event EscrowAdminUpdated(
         address indexed updater, uint256 indexed questId, address indexed newAdmin
     );
+    event TokenWhitelisted(address indexed token);
+    event TokenRemovedFromWhitelist(address indexed token);
+
+    modifier onlyAdmin(uint256 questId) {
+        if (msg.sender != s_escrow_admin[questId] && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
+            revert Factory__OnlyCallableByAdmin();
+        }
+        _;
+    }
 
     /// @custom:oz-upgrades-unsafe-allow constructor
     constructor(CUBE cube) {
@@ -62,10 +71,8 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         _disableInitializers();
     }
 
-    /**
-     * @notice Initializes the contract by setting up roles and linking to the CUBE contract.
-     * @param admin Address to be granted the default admin role.
-     */
+    /// @notice Initializes the contract by setting up roles and linking to the CUBE contract.
+    /// @param admin Address to be granted the default admin role.
     function initialize(address admin) external override initializer {
         __AccessControl_init();
         __UUPSUpgradeable_init();
@@ -73,15 +80,13 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
     }
 
-    /**
-     * @notice Updates the admin of a specific escrow.
-     * @dev Can only be called by the current escrow admin.
-     * @param questId Identifier of the quest associated with the escrow.
-     * @param newAdmin Address of the new admin.
-     */
+    /// @notice Updates the admin of a specific escrow.
+    /// @dev Can only be called by the current escrow admin.
+    /// @param questId Identifier of the quest associated with the escrow.
+    /// @param newAdmin Address of the new admin.
     function updateEscrowAdmin(uint256 questId, address newAdmin) external override {
         if (s_escrow_admin[questId] != msg.sender) {
-            revert Factory__OnlyCallableByEscrowAdmin();
+            revert Factory__OnlyCallableByAdmin();
         }
         if (newAdmin == address(0)) {
             revert Factory__ZeroAddress();
@@ -90,14 +95,12 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         emit EscrowAdminUpdated(msg.sender, questId, newAdmin);
     }
 
-    /**
-     * @notice Creates a new escrow for a quest.
-     * @dev Can only be called by an account with the default admin role.
-     * @param questId The quest the escrow should be created for.
-     * @param admin Admin of the new escrow.
-     * @param whitelistedTokens Array of addresses of tokens that are whitelisted for the escrow.
-     * @param treasury Address of the treasury where fees are sent.
-     */
+    /// @notice Creates a new escrow for a quest.
+    /// @dev Can only be called by an account with the default admin role.
+    /// @param questId The quest the escrow should be created for.
+    /// @param admin Admin of the new escrow.
+    /// @param whitelistedTokens Array of addresses of tokens that are whitelisted for the escrow.
+    /// @param treasury Address of the treasury where fees are sent.
     function createEscrow(
         uint256 questId,
         address admin,
@@ -109,28 +112,58 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         }
 
         s_escrow_admin[questId] = admin;
-        address escrow = address(new Escrow(admin, whitelistedTokens, treasury));
+        address escrow = address(new Escrow(whitelistedTokens, treasury));
         s_escrows[questId] = escrow;
 
         emit EscrowRegistered(msg.sender, escrow, questId);
     }
 
-    /**
-     * @notice Withdraws funds from the escrow associated with a quest.
-     * @dev Withdrawal can only be initiated by the escrow admin or an account with the default admin role.
-     * @param questId The quest the escrow is mapped to.
-     * @param to Recipient of the funds.
-     * @param token Address of the token to withdraw.
-     * @param tokenId Identifier of the token (for ERC721 and ERC1155).
-     * @param tokenType Type of the token being withdrawn.
-     */
+    /// @notice Adds a token to the whitelist, allowing it to be used in the escrow.
+    /// @param token The address of the token to whitelist.
+    function addTokenToWhitelist(uint256 questId, address token)
+        external
+        override
+        onlyAdmin(questId)
+    {
+        address escrow = s_escrows[questId];
+        if (escrow == address(0)) {
+            revert Factory__NoQuestEscrowFound();
+        }
+
+        IEscrow(escrow).addTokenToWhitelist(token);
+        emit TokenWhitelisted(token);
+    }
+
+    /// @notice Removes a token from the whitelist.
+    /// @param token The address of the token to remove from the whitelist.
+    function removeTokenFromWhitelist(uint256 questId, address token)
+        external
+        override
+        onlyAdmin(questId)
+    {
+        address escrow = s_escrows[questId];
+        if (escrow == address(0)) {
+            revert Factory__NoQuestEscrowFound();
+        }
+
+        IEscrow(escrow).removeTokenFromWhitelist(token);
+        emit TokenRemovedFromWhitelist(token);
+    }
+
+    /// @notice Withdraws funds from the escrow associated with a quest.
+    /// @dev Withdrawal can only be initiated by the escrow admin or an account with the default admin role.
+    /// @param questId The quest the escrow is mapped to.
+    /// @param to Recipient of the funds.
+    /// @param token Address of the token to withdraw.
+    /// @param tokenId Identifier of the token (for ERC721 and ERC1155).
+    /// @param tokenType Type of the token being withdrawn.
     function withdrawFunds(
         uint256 questId,
         address to,
         address token,
         uint256 tokenId,
         TokenType tokenType
-    ) external override {
+    ) external override onlyAdmin(questId) {
         // make sure quest is inactive
         if (i_cube.isQuestActive(questId)) {
             revert Factory__CUBEQuestNotActive();
@@ -138,11 +171,6 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         address escrow = s_escrows[questId];
         if (escrow == address(0)) {
             revert Factory__NoQuestEscrowFound();
-        }
-
-        // only callable by escrow admin or default admin
-        if (msg.sender != s_escrow_admin[questId] && !hasRole(DEFAULT_ADMIN_ROLE, msg.sender)) {
-            revert Factory__OnlyCallableByEscrowAdmin();
         }
 
         if (tokenType == TokenType.NATIVE) {
@@ -167,17 +195,15 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         }
     }
 
-    /**
-     * @notice Distributes rewards for a quest.
-     * @dev Can only be called by the CUBE contract.
-     * @param questId The quest the escrow is mapped to.
-     * @param token Address of the token for rewards.
-     * @param to Recipient of the rewards.
-     * @param amount Amount of tokens.
-     * @param rewardTokenId Token ID for ERC721 and ERC1155 rewards.
-     * @param tokenType Type of the token for rewards.
-     * @param rakeBps Basis points for the rake to be taken from the reward.
-     */
+    /// @notice Distributes rewards for a quest.
+    /// @dev Can only be called by the CUBE contract.
+    /// @param questId The quest the escrow is mapped to.
+    /// @param token Address of the token for rewards.
+    /// @param to Recipient of the rewards.
+    /// @param amount Amount of tokens.
+    /// @param rewardTokenId Token ID for ERC721 and ERC1155 rewards.
+    /// @param tokenType Type of the token for rewards.
+    /// @param rakeBps Basis points for the rake to be taken from the reward.
     function distributeRewards(
         uint256 questId,
         address token,

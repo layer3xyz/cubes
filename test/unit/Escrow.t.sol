@@ -70,7 +70,7 @@ contract EscrowTest is Test {
         whitelistedTokens.push(address(erc1155));
 
         vm.broadcast(adminAddress);
-        escrowMock = new Escrow(adminAddress, whitelistedTokens, treasury);
+        escrowMock = new Escrow(whitelistedTokens, treasury);
         escrowAddr = address(escrowMock);
         erc20Mock = MockERC20(erc20);
         erc721Mock = MockERC721(erc721);
@@ -327,21 +327,22 @@ contract EscrowTest is Test {
         escrowMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
     }
 
-    function testAddAdmin() public {
+    function testChangeOwner() public {
         vm.startBroadcast(alice);
 
         address token = makeAddr("someToken");
 
-        bytes4 selector = bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)"));
-        bytes memory expectedError =
-            abi.encodeWithSelector(selector, alice, escrowMock.DEFAULT_ADMIN_ROLE());
-        vm.expectRevert(expectedError);
+        vm.expectRevert(Escrow.Escrow__MustBeOwner.selector);
         escrowMock.addTokenToWhitelist(token);
         vm.stopBroadcast();
 
-        vm.startBroadcast(adminAddress);
-        escrowMock.grantRole(escrowMock.DEFAULT_ADMIN_ROLE(), alice);
-        vm.stopBroadcast();
+        address owner = escrowMock.s_owner();
+        assert(owner == adminAddress);
+
+        vm.prank(adminAddress);
+        escrowMock.changeOwner(alice);
+        address newOwner = escrowMock.s_owner();
+        assert(newOwner == alice);
 
         vm.prank(alice);
         escrowMock.addTokenToWhitelist(token);

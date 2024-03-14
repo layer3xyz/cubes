@@ -10,7 +10,6 @@
 
 pragma solidity 0.8.20;
 
-import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/interfaces/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/interfaces/IERC721.sol";
 import {IERC1155} from "@openzeppelin/contracts/interfaces/IERC1155.sol";
@@ -18,7 +17,7 @@ import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Hol
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
 import {IEscrow} from "./interfaces/IEscrow.sol";
 
-contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
+contract Escrow is IEscrow, ERC721Holder, ERC1155Holder {
     error Escrow__TokenNotWhitelisted();
     error Escrow__InsufficientEscrowBalance();
     error Escrow__MustBeOwner();
@@ -63,15 +62,12 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
         _;
     }
 
-    /// @notice Initializes the escrow contract with specified admin, whitelisted tokens, and treasury address.
-    /// @param admin The address to be given the default admin role.
+    /// @notice Initializes the escrow contract with specified whitelisted tokens and treasury address.
     /// @param tokenAddr An array of addresses of tokens to whitelist upon initialization.
     /// @param treasury The address of the treasury for receiving rake payments.
-    constructor(address admin, address[] memory tokenAddr, address treasury) {
+    constructor(address[] memory tokenAddr, address treasury) {
         s_owner = msg.sender;
         i_treasury = treasury;
-
-        _grantRole(DEFAULT_ADMIN_ROLE, admin);
 
         uint256 length = tokenAddr.length;
         for (uint256 i = 0; i < length;) {
@@ -94,7 +90,7 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
 
     /// @notice Adds a token to the whitelist, allowing it to be used in the escrow.
     /// @param token The address of the token to whitelist.
-    function addTokenToWhitelist(address token) external override onlyRole(DEFAULT_ADMIN_ROLE) {
+    function addTokenToWhitelist(address token) external override onlyOwner {
         if (token == address(0)) {
             revert Escrow__ZeroAddress();
         }
@@ -104,11 +100,7 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
 
     /// @notice Removes a token from the whitelist.
     /// @param token The address of the token to remove from the whitelist.
-    function removeTokenFromWhitelist(address token)
-        external
-        override
-        onlyRole(DEFAULT_ADMIN_ROLE)
-    {
+    function removeTokenFromWhitelist(address token) external override onlyOwner {
         s_whitelistedTokens[token] = false;
         emit TokenRemovedFromWhitelist(token);
     }
@@ -157,7 +149,6 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
         if (!s_whitelistedTokens[token]) {
             revert Escrow__TokenNotWhitelisted();
         }
-
         if (amount > escrowERC20Reserves(token)) {
             revert Escrow__InsufficientEscrowBalance();
         }
@@ -246,7 +237,7 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
             revert Escrow__InvalidRakeBps();
         }
 
-        // rake payment
+        // rake payment in basis points
         uint256 rake = amount * rakeBps / MAX_BPS;
         if (rake > 0) {
             (bool rakeSuccess,) = payable(i_treasury).call{value: rake}("");
@@ -266,7 +257,7 @@ contract Escrow is IEscrow, AccessControl, ERC721Holder, ERC1155Holder {
     function supportsInterface(bytes4 interfaceId)
         public
         view
-        override(AccessControl, ERC1155Holder)
+        override(ERC1155Holder)
         returns (bool)
     {
         return super.supportsInterface(interfaceId);

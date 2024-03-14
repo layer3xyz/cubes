@@ -23,14 +23,17 @@ interface IFactory is ITokenType {
         TokenType tokenType
     ) external;
 
-    function updateEscrowAdmin(uint256 questId, address newAdmin) external;
-
     function createEscrow(
         uint256 questId,
         address admin,
         address[] memory whitelistedTokens,
         address treasury
     ) external;
+
+    function updateEscrowAdmin(uint256 questId, address newAdmin) external;
+
+    function addTokenToWhitelist(uint256 questId, address token) external;
+    function removeTokenFromWhitelist(uint256 questId, address token) external;
 
     function initialize(address admin) external;
 }

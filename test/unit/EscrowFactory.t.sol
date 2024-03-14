@@ -248,7 +248,7 @@ contract EscrowFactoryTest is Test {
         erc20Mock.mint(escrowAddr, erc20Amount);
 
         vm.prank(ALICE);
-        vm.expectRevert(Factory.Factory__OnlyCallableByEscrowAdmin.selector);
+        vm.expectRevert(Factory.Factory__OnlyCallableByAdmin.selector);
         factoryContract.withdrawFunds(0, ALICE, address(erc20Mock), 0, ITokenType.TokenType.ERC20);
     }
 
@@ -257,7 +257,7 @@ contract EscrowFactoryTest is Test {
         erc20Mock.mint(escrowAddr, erc20Amount);
 
         vm.prank(ALICE);
-        vm.expectRevert(Factory.Factory__OnlyCallableByEscrowAdmin.selector);
+        vm.expectRevert(Factory.Factory__OnlyCallableByAdmin.selector);
         factoryContract.withdrawFunds(0, ALICE, address(erc20Mock), 0, ITokenType.TokenType.ERC20);
 
         vm.prank(adminAddress);
@@ -269,12 +269,40 @@ contract EscrowFactoryTest is Test {
         assert(erc20Mock.balanceOf(ALICE) == erc20Amount);
     }
 
+    function testChangeEscrowAdminAndWhitelistToken() public {
+        vm.prank(ALICE);
+        address tokenToAdd = makeAddr("tokenToAdd");
+
+        vm.expectRevert(Factory.Factory__OnlyCallableByAdmin.selector);
+        factoryContract.addTokenToWhitelist(0, tokenToAdd);
+
+        vm.prank(adminAddress);
+        factoryContract.updateEscrowAdmin(0, ALICE);
+
+        vm.prank(ALICE);
+        factoryContract.addTokenToWhitelist(0, tokenToAdd);
+
+        bool isWhitelisted = escrowMock.s_whitelistedTokens(tokenToAdd);
+        assert(isWhitelisted);
+    }
+
+    function testRemoveTokenFromWhitelist() public {
+        bool isWhitelisted = escrowMock.s_whitelistedTokens(address(erc20Mock));
+        assert(isWhitelisted);
+
+        vm.prank(adminAddress);
+        factoryContract.removeTokenFromWhitelist(0, address(erc20Mock));
+
+        bool isWhitelistedPostRemoval = escrowMock.s_whitelistedTokens(address(erc20Mock));
+        assert(!isWhitelistedPostRemoval);
+    }
+
     function testUpdateAdminWithdrawByDefaultAdmin(uint256 erc20Amount) public {
         erc20Amount = bound(erc20Amount, 0, type(uint64).max);
         erc20Mock.mint(escrowAddr, erc20Amount);
 
         vm.prank(ALICE);
-        vm.expectRevert(Factory.Factory__OnlyCallableByEscrowAdmin.selector);
+        vm.expectRevert(Factory.Factory__OnlyCallableByAdmin.selector);
         factoryContract.withdrawFunds(0, ALICE, address(erc20Mock), 0, ITokenType.TokenType.ERC20);
 
         // update admin but withdraw by default admin, which should still work
@@ -288,7 +316,7 @@ contract EscrowFactoryTest is Test {
 
     function testUpdateAdminByNonAdmin() public {
         vm.prank(ALICE);
-        vm.expectRevert(Factory.Factory__OnlyCallableByEscrowAdmin.selector);
+        vm.expectRevert(Factory.Factory__OnlyCallableByAdmin.selector);
         factoryContract.updateEscrowAdmin(0, ALICE);
     }
 
