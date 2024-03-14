@@ -27,7 +27,7 @@ contract Invariant is StdInvariant, Test {
         erc20Mock.mint(admin, startingAmount);
         whitelistedTokens.push(address(erc20Mock));
 
-        escrow = new Escrow(whitelistedTokens, treasury);
+        escrow = new Escrow(admin, whitelistedTokens, treasury);
 
         // deposit to escrow
         erc20Mock.transfer(address(escrow), startingAmount);

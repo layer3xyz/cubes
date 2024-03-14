@@ -112,7 +112,7 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         }
 
         s_escrow_admin[questId] = admin;
-        address escrow = address(new Escrow(whitelistedTokens, treasury));
+        address escrow = address(new Escrow(address(this), whitelistedTokens, treasury));
         s_escrows[questId] = escrow;
 
         emit EscrowRegistered(msg.sender, escrow, questId);

@@ -15,9 +15,11 @@ import {IERC721} from "@openzeppelin/contracts/interfaces/IERC721.sol";
 import {IERC1155} from "@openzeppelin/contracts/interfaces/IERC1155.sol";
 import {ERC721Holder} from "@openzeppelin/contracts/token/ERC721/utils/ERC721Holder.sol";
 import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155Holder.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IEscrow} from "./interfaces/IEscrow.sol";
 
-contract Escrow is IEscrow, ERC721Holder, ERC1155Holder {
+contract Escrow is IEscrow, ERC721Holder, ERC1155Holder, Ownable2Step {
     error Escrow__TokenNotWhitelisted();
     error Escrow__InsufficientEscrowBalance();
     error Escrow__MustBeOwner();
@@ -48,25 +50,16 @@ contract Escrow is IEscrow, ERC721Holder, ERC1155Holder {
 
     bytes4 private constant TRANSFER_ERC20 = bytes4(keccak256(bytes("transfer(address,uint256)")));
 
-    address public s_owner;
     address public immutable i_treasury;
 
     uint16 constant MAX_BPS = 10_000;
 
     mapping(address => bool) public s_whitelistedTokens;
 
-    modifier onlyOwner() {
-        if (msg.sender != s_owner) {
-            revert Escrow__MustBeOwner();
-        }
-        _;
-    }
-
     /// @notice Initializes the escrow contract with specified whitelisted tokens and treasury address.
     /// @param tokenAddr An array of addresses of tokens to whitelist upon initialization.
     /// @param treasury The address of the treasury for receiving rake payments.
-    constructor(address[] memory tokenAddr, address treasury) {
-        s_owner = msg.sender;
+    constructor(address _owner, address[] memory tokenAddr, address treasury) Ownable(_owner) {
         i_treasury = treasury;
 
         uint256 length = tokenAddr.length;
@@ -76,16 +69,6 @@ contract Escrow is IEscrow, ERC721Holder, ERC1155Holder {
                 ++i;
             }
         }
-    }
-
-    /// @notice Changes the owner of the escrow.
-    /// @param newOwner The address of the new owner.
-    function changeOwner(address newOwner) external override onlyOwner {
-        if (newOwner == address(0)) {
-            revert Escrow__ZeroAddress();
-        }
-        s_owner = newOwner;
-        emit OwnerChanged(msg.sender, newOwner);
     }
 
     /// @notice Adds a token to the whitelist, allowing it to be used in the escrow.
@@ -157,7 +140,7 @@ contract Escrow is IEscrow, ERC721Holder, ERC1155Holder {
         }
 
         // rake payment in basis points
-        uint256 rake = amount * rakeBps / MAX_BPS;
+        uint256 rake = (amount * rakeBps) / MAX_BPS;
         if (rake > 0) {
             _rakePayoutERC20(token, rake);
         }
@@ -238,7 +221,7 @@ contract Escrow is IEscrow, ERC721Holder, ERC1155Holder {
         }
 
         // rake payment in basis points
-        uint256 rake = amount * rakeBps / MAX_BPS;
+        uint256 rake = (amount * rakeBps) / MAX_BPS;
         if (rake > 0) {
             (bool rakeSuccess,) = payable(i_treasury).call{value: rake}("");
             if (!rakeSuccess) {
@@ -262,6 +245,8 @@ contract Escrow is IEscrow, ERC721Holder, ERC1155Holder {
     {
         return super.supportsInterface(interfaceId);
     }
+
+    function renounceOwnership() public override onlyOwner {}
 
     fallback() external payable {}
     receive() external payable {}

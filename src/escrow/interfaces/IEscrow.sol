@@ -17,5 +17,4 @@ interface IEscrow {
 
     function addTokenToWhitelist(address token) external;
     function removeTokenFromWhitelist(address token) external;
-    function changeOwner(address newOwner) external;
 }

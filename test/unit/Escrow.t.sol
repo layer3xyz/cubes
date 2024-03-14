@@ -70,7 +70,7 @@ contract EscrowTest is Test {
         whitelistedTokens.push(address(erc1155));
 
         vm.broadcast(adminAddress);
-        escrowMock = new Escrow(whitelistedTokens, treasury);
+        escrowMock = new Escrow(adminAddress, whitelistedTokens, treasury);
         escrowAddr = address(escrowMock);
         erc20Mock = MockERC20(erc20);
         erc721Mock = MockERC721(erc721);
@@ -164,9 +164,8 @@ contract EscrowTest is Test {
 
         uint256 amount = 1e18;
         uint256 rakeBps = 300;
-        vm.startBroadcast(adminAddress);
+        vm.prank(adminAddress);
         escrowMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
-        vm.stopBroadcast();
 
         uint256 postBalTreasury = erc20Mock.balanceOf(treasury);
         uint256 postBalBob = erc20Mock.balanceOf(bob);
@@ -323,25 +322,35 @@ contract EscrowTest is Test {
         uint256 amount = 100;
         uint256 rakeBps = 300;
         vm.prank(alice);
-        vm.expectRevert(Escrow.Escrow__MustBeOwner.selector);
+        bytes4 selector = bytes4(keccak256("OwnableUnauthorizedAccount(address)"));
+        bytes memory expectedError = abi.encodeWithSelector(selector, alice);
+        vm.expectRevert(expectedError);
         escrowMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
     }
 
     function testChangeOwner() public {
-        vm.startBroadcast(alice);
-
         address token = makeAddr("someToken");
 
-        vm.expectRevert(Escrow.Escrow__MustBeOwner.selector);
+        bytes4 selector = bytes4(keccak256("OwnableUnauthorizedAccount(address)"));
+        bytes memory expectedError = abi.encodeWithSelector(selector, alice);
+        vm.expectRevert(expectedError);
+        vm.prank(alice);
         escrowMock.addTokenToWhitelist(token);
-        vm.stopBroadcast();
 
-        address owner = escrowMock.s_owner();
+        address owner = escrowMock.owner();
         assert(owner == adminAddress);
 
         vm.prank(adminAddress);
-        escrowMock.changeOwner(alice);
-        address newOwner = escrowMock.s_owner();
+        escrowMock.transferOwnership(alice);
+
+        address pendingOwner = escrowMock.pendingOwner();
+        assert(pendingOwner == alice);
+        address stillOwner = escrowMock.owner();
+        assert(stillOwner == adminAddress);
+
+        vm.prank(alice);
+        escrowMock.acceptOwnership();
+        address newOwner = escrowMock.owner();
         assert(newOwner == alice);
 
         vm.prank(alice);
@@ -350,14 +359,15 @@ contract EscrowTest is Test {
         assert(escrowMock.s_whitelistedTokens(token));
     }
 
-    function testUpdateOwner() public {
-        address currentOwner = escrowMock.s_owner();
-        assert(currentOwner == adminAddress);
+    function testRenounceOwnership() public {
         vm.prank(adminAddress);
-        escrowMock.changeOwner(alice);
 
-        address newOwner = escrowMock.s_owner();
-        assert(newOwner == alice);
+        // we overwrite this function since there'll never be a case where we want to do this
+        escrowMock.renounceOwnership();
+
+        // make sure transfership wasn't renounced
+        address owner = escrowMock.owner();
+        assert(owner == adminAddress);
     }
 
     function testEscrowERC165Interface() public {

@@ -21,7 +21,7 @@ contract StatefulFuzzEscrow is StdInvariant, Test {
         erc20Mock = new MockERC20();
         s_whitelistedTokens.push(address(erc20Mock));
 
-        escrow = new Escrow(s_whitelistedTokens, s_treasury);
+        escrow = new Escrow(s_admin, s_whitelistedTokens, s_treasury);
         targetContract(address(escrow));
         vm.stopPrank();
     }
