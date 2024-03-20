@@ -21,7 +21,7 @@ import {IFactory} from "./interfaces/IFactory.sol";
 
 contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgradeable {
     error Factory__OnlyCallableByCUBE();
-    error Factory__CUBEQuestNotActive();
+    error Factory__CUBEQuestIsActive();
     error Factory__NoQuestEscrowFound();
     error Factory__OnlyCallableByAdmin();
     error Factory__EscrowAlreadyExists();
@@ -160,9 +160,9 @@ contract Factory is IFactory, Initializable, AccessControlUpgradeable, UUPSUpgra
         uint256 tokenId,
         TokenType tokenType
     ) external override onlyAdmin(questId) {
-        // make sure quest is inactive
+        // only allow withdrawals if quest is inactive
         if (i_cube.isQuestActive(questId)) {
-            revert Factory__CUBEQuestNotActive();
+            revert Factory__CUBEQuestIsActive();
         }
         address escrow = s_escrows[questId];
         if (escrow == address(0)) {

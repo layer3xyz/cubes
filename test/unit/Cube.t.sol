@@ -215,7 +215,7 @@ contract CubeTest is Test {
         bool isQuestActive = cubeContract.isQuestActive(deployEscrow.QUEST_ID());
         assert(isQuestActive == true);
 
-        vm.expectRevert(Factory.Factory__CUBEQuestNotActive.selector);
+        vm.expectRevert(Factory.Factory__CUBEQuestIsActive.selector);
         factoryContract.withdrawFunds(
             deployEscrow.QUEST_ID(), ALICE, address(erc20Mock), 0, ITokenType.TokenType.ERC20
         );
