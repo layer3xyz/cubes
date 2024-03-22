@@ -19,7 +19,8 @@ contract UpgradeCube is Script {
             deployerKey = vm.envUint("PRIVATE_KEY");
         }
 
-        upgradeCube(vm.addr(deployerKey), 0xad4dCAfE9C020CF694FFaa943Be69eC182CA07DC);
+        address proxyAddr = address(0);
+        upgradeCube(vm.addr(deployerKey), proxyAddr);
     }
 
     function upgradeCube(address _admin, address _proxyAddress) public {

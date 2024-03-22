@@ -220,8 +220,8 @@ contract CUBE is
     }
 
     /// @notice Returns the version of the CUBE smart contract
-    function cubeVersion() external pure returns (uint8) {
-        return 2;
+    function cubeVersion() external pure returns (string memory) {
+        return "2";
     }
 
     /// @notice Initializes the CUBE contract with necessary parameters
