@@ -86,9 +86,11 @@ When a new quest comes to life in our system, we call `initializeQuest`. This fu
 
 ---
 
-### Audit
+### Audits
 
-In December 2023 [CUBE.sol](./src/CUBE.sol) was audited by Sherlock, with no issues found. Find the report [here](./audit/sherlock_december_2023.pdf).
+In December 2023 [CUBE.sol](./src/CUBE.sol) was audited by Sherlock. Find the report [here](./audit/cube/sherlock_december_2023.pdf).
+
+In March 2024, both [Factory.sol](./src/escrow/Factory.sol) and [Escrow.sol](./src/escrow/Escrow.sol) were audited by Three Sigma. Find the report [here](./audit/escrow/three_sigma_march_2024.pdf).
 
 ### Bug Bounty Program
 

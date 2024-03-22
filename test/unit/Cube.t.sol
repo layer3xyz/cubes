@@ -211,23 +211,22 @@ contract CubeTest is Test {
     function testWithdrawFundsWhenQuestInactive() public {
         vm.startPrank(adminAddress);
 
+        erc20Mock.transfer(address(mockEscrow), 100);
+
         // withdrawal should revert if quest is still active
-        bool isQuestActive = cubeContract.isQuestActive(deployEscrow.QUEST_ID());
+        bool isQuestActive = cubeContract.isQuestActive(1);
         assert(isQuestActive == true);
 
         vm.expectRevert(Factory.Factory__CUBEQuestIsActive.selector);
-        factoryContract.withdrawFunds(
-            deployEscrow.QUEST_ID(), ALICE, address(erc20Mock), 0, ITokenType.TokenType.ERC20
-        );
+        factoryContract.withdrawFunds(1, ALICE, address(erc20Mock), 0, ITokenType.TokenType.ERC20);
 
         uint256 escrowBalanceBefore = erc20Mock.balanceOf(address(mockEscrow));
 
-        cubeContract.unpublishQuest(deployEscrow.QUEST_ID());
-        bool isQuestActive2 = cubeContract.isQuestActive(deployEscrow.QUEST_ID());
+        cubeContract.unpublishQuest(1);
+        bool isQuestActive2 = cubeContract.isQuestActive(1);
         assert(isQuestActive2 == false);
-        factoryContract.withdrawFunds(
-            deployEscrow.QUEST_ID(), BOB, address(erc20Mock), 0, ITokenType.TokenType.ERC20
-        );
+
+        factoryContract.withdrawFunds(1, BOB, address(erc20Mock), 0, ITokenType.TokenType.ERC20);
         vm.stopPrank();
 
         assert(erc20Mock.balanceOf(BOB) == escrowBalanceBefore);
@@ -413,7 +412,7 @@ contract CubeTest is Test {
 
         // Expecting TokenReward event to be emitted
         vm.expectEmit(true, true, true, true);
-        emit TokenReward(1, address(0), 137, 5, 1, ITokenType.TokenType.NATIVE);
+        emit TokenReward(1, address(erc20Mock), 137, 100, 0, ITokenType.TokenType.ERC20);
 
         cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
     }
@@ -1331,6 +1330,11 @@ contract CubeTest is Test {
         (CUBE.CubeData[] memory _data, bytes[] memory _sigs) = _getSignedCubeMintData();
         vm.expectRevert(CUBE.CUBE__FeeNotEnough.selector);
         cubeContract.mintCubes{value: 0.0001 ether}(_data, _sigs);
+    }
+
+    function testCubeVersion() public {
+        string memory v = cubeContract.cubeVersion();
+        assertEq(v, "2");
     }
 
     function testMintWithNoFee() public {
