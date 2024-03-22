@@ -24,7 +24,7 @@ endif
 
 # Base Sepolia
 ifeq ($(findstring --network base_sepolia,$(ARGS)),--network base_sepolia)
-	NETWORK_ARGS := --rpc-url $(BASE_SEPOLIA_RPC_ENDPOINT) --private-key $(PRIVATE_KEY) --verify --etherscan-api-key $(BASESCAN_API_KEY) --broadcast -vvvv
+	NETWORK_ARGS := --rpc-url $(BASE_SEPOLIA_RPC_ENDPOINT) --private-key $(PRIVATE_KEY) --broadcast -vvvv
 endif
 
 deploy:
@@ -32,6 +32,9 @@ deploy:
 
 deploy_proxy:
 	@forge script script/DeployProxy.s.sol:DeployProxy $(NETWORK_ARGS) --ffi
+
+upgrade_proxy:
+	@forge script script/UpgradeCube.s.sol:UpgradeCube $(NETWORK_ARGS) --ffi
 
 fork_test:
 	@forge test --rpc-url $(RPC_ENDPOINT) -vvv
