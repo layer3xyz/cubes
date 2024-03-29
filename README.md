@@ -64,7 +64,7 @@ The minting process is initiated by a wallet with the _signer role_ creating an 
 
 When a new quest comes to life in our system, we call `initializeQuest`. This function is key—it broadcasts event data about the quest, such as participating communities (Layer3, Uniswap, 1Inch, etc.), the quest's difficulty level (beginner, intermediate, advanced), title, and more.
 
-## Smart Contract Details
+## CUBE Smart Contract Details
 
 #### Key Features
 
@@ -83,6 +83,41 @@ When a new quest comes to life in our system, we call `initializeQuest`. This fu
 - Default Admin: Full control over the contract, including upgrading and setting token URIs.
 - Signer: Authorized to initialize quests and sign cube data for minting.
 - Upgrader: Can upgrade the contract
+
+## Token Reward System
+
+### Overview
+
+The Layer3 Token Reward System automates the distribution of token rewards upon the completion of onchain events. This system is empowered by two primary smart contracts, [Factory.sol](./src/escrow/Factory.sol) and [Escrow.sol](./src/escrow/Escrow.sol), which work in tandem with [CUBE.sol](./src/CUBE.sol) to handle the lifecycle of reward distribution. Used with CUBEs, this is the first mechanism that supports token rewards for multichain interactions.
+
+### Contracts
+
+### Factory
+
+[Factory.sol](./src/escrow/Factory.sol) serves as a factory hub within the Layer3 Token Reward System, and is responsible of creating individual [Escrow.sol](./src/escrow/Escrow.sol) contracts for each new quest. These escrow contracts are where the token rewards are stored and from which they are distributed to the users upon quest completion.
+
+#### Key Functions
+
+- **createEscrow**: Deploys a new [Escrow.sol](./src/escrow/Escrow.sol) instance with specified admin and whitelisted tokens for a given quest ID.
+- **updateEscrowAdmin**: Allows changing the admin of an escrow.
+- **withdrawFunds**: Withdraws funds from the escrow when a quest is inactive, supporting various token types.
+- **distributeRewards**: Sends out rewards from escrow when called by the CUBE contract.
+
+### Escrow
+
+[Escrow.sol](./src/escrow/Escrow.sol) acts as a holding mechanism for tokens until they are rewarded to users upon quest completion. It is designed to support various token standards including ERC20, ERC721, and ERC1155.
+
+#### Key Functions
+
+- **addTokenToWhitelist**: Enables a token to be used within the escrow.
+- **removeTokenFromWhitelist**: Disables the use of a token within the escrow.
+- **withdrawERC20**, **withdrawERC721**, **withdrawERC1155**, **withdrawNative**: Allow the withdrawal of rewards to a specified recipient, applying a rake as defined.
+
+### Workflow
+
+1. **Quest Initiation**: When creating a new quest that should contain a token reward, the creator additionally creates a unique [Escrow.sol](./src/escrow/Escrow.sol) for the quest by calling [Factory.sol](./src/escrow/Factory.sol).
+2. **Reward Funding**: The created [Escrow.sol](./src/escrow/Escrow.sol) contract is then funded with the appropriate tokens that will be awarded to the users completing the quest.
+3. **Quest Completion**: After users complete the quest and mint their CUBEs, the [CUBE.sol](./src/CUBE.sol) contract calls the **distributeRewards** function inside [Factory.sol](./src/escrow/Factory.sol), which triggers [Escrow.sol](./src/escrow/Escrow.sol) to make a push payment to the user.
 
 ---
 
