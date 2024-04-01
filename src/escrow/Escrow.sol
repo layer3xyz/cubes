@@ -18,9 +18,8 @@ import {ERC1155Holder} from "@openzeppelin/contracts/token/ERC1155/utils/ERC1155
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IEscrow} from "./interfaces/IEscrow.sol";
-import {ITokenType} from "./interfaces/ITokenType.sol";
 
-contract Escrow is IEscrow, ERC721Holder, ERC1155Holder, Ownable2Step, ITokenType {
+contract Escrow is IEscrow, ERC721Holder, ERC1155Holder, Ownable2Step {
     error Escrow__TokenNotWhitelisted();
     error Escrow__InsufficientEscrowBalance();
     error Escrow__ZeroAddress();

@@ -27,7 +27,7 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
     error EscrowPermit__ClaimFeePayoutFailed();
 
     bytes32 internal constant HASH = keccak256(
-        "ClaimData(address token,address to,uint256 amount,uint256 rewardTokenId,uint8 tokenType,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
+        "ClaimData(uint256 id,address token,address to,uint256 amount,uint256 rewardTokenId,uint8 tokenType,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
     );
 
     mapping(uint256 => bool) internal s_sigNonces;
@@ -42,7 +42,7 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
     );
 
     struct ClaimData {
-        uint256 taskId;
+        uint256 id;
         address token;
         address to;
         uint256 amount;
@@ -82,9 +82,7 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
         } else {
             return;
         }
-        emit RewardClaimed(
-            data.taskId, data.to, data.amount, data.rewardTokenId, uint8(data.tokenType)
-        );
+        emit RewardClaimed(data.id, data.to, data.amount, data.rewardTokenId, uint8(data.tokenType));
     }
 
     function _validateSignature(ClaimData calldata data, bytes calldata signature) internal {
@@ -105,6 +103,7 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
     function _getStructHash(ClaimData calldata data) internal pure returns (bytes memory) {
         return abi.encode(
             HASH,
+            data.id,
             data.token,
             data.to,
             data.amount,
