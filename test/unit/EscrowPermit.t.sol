@@ -455,6 +455,7 @@ contract EscrowPermitTest is Test {
 
         EscrowPermit.ClaimData memory _data = EscrowPermit.ClaimData({
             id: 123,
+            source: "test",
             token: address(erc20Mock),
             to: bob,
             amount: reward,
@@ -500,8 +501,11 @@ contract EscrowPermitTest is Test {
     function getStructHash(EscrowPermit.ClaimData memory data) public pure returns (bytes32) {
         return keccak256(
             abi.encode(
-                0xf94e543966e13f1053979d0644edc7bb78e396e7c528e9361beb284fae3a3447,
+                keccak256(
+                    "ClaimData(uint256 id,string source,address token,address to,uint256 amount,uint256 rewardTokenId,uint8 tokenType,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
+                ),
                 data.id,
+                keccak256(bytes(data.source)),
                 data.token,
                 data.to,
                 data.amount,
