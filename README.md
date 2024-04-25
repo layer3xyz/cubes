@@ -80,7 +80,7 @@ When a new quest comes to life in our system, we call `initializeQuest`. This fu
 
 #### Roles and Permissions
 
-- Default Admin: Full control over the contract, including upgrading and setting token URIs.
+- Default Admin: Full control over the contract and can handle the different roles.
 - Signer: Authorized to initialize quests and sign cube data for minting.
 - Upgrader: Can upgrade the contract
 
