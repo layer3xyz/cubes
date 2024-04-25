@@ -27,7 +27,7 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
     error TaskEscrow__ClaimFeePayoutFailed();
 
     bytes32 internal constant CLAIM_HASH = keccak256(
-        "ClaimData(uint256 taskId,address token,address to,uint256 amount,uint256 rewardTokenId,uint8 tokenType,uint256 rakeBps,uint256 claimFee,uint256 nonce,string txHash,string networkChainId)"
+        "ClaimData(uint256 taskId,address token,address to,uint256 amount,uint256 rewardTokenId,uint8 tokenType,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
     );
 
     mapping(uint256 => bool) internal s_sigNonces;
