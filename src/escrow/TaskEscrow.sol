@@ -27,7 +27,7 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
     error TaskEscrow__ClaimFeePayoutFailed();
 
     bytes32 internal constant CLAIM_HASH = keccak256(
-        "ClaimData(uint256 taskId,address token,address to,uint256 amount,uint256 rewardTokenId,uint8 tokenType,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
+        "ClaimData(uint256 taskId,string source,address token,address to,uint8 tokenType,uint256 amount,uint256 tokenId,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
     );
 
     mapping(uint256 => bool) internal s_sigNonces;
@@ -38,7 +38,7 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
         address indexed to,
 		uint256 indexed nonce,
         uint256 amount,
-        uint256 rewardTokenId,
+        uint256 tokenId,
         uint8 tokenType
     );
 
@@ -53,9 +53,9 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
         uint256 taskId;
         address token;
         address to;
-        uint256 amount;
-        uint256 rewardTokenId;
         TokenType tokenType;
+        uint256 amount;
+        uint256 tokenId;
         uint256 rakeBps;
         uint256 claimFee;
         uint256 nonce;
@@ -74,10 +74,12 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
         if (msg.value < data.claimFee) {
             revert TaskEscrow__InsufficientClaimFee();
         }
+
         (bool success,) = i_treasury.call{value: msg.value}("");
         if (!success) {
             revert TaskEscrow__ClaimFeePayoutFailed();
         }
+
         emit ClaimFeePayout(msg.sender, i_treasury, msg.value);
 
 		if (bytes(data.txHash).length > 0) {
@@ -90,15 +92,15 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
         } else if (data.tokenType == TokenType.ERC20) {
             _withdrawERC20(data.token, data.to, data.amount, data.rakeBps);
         } else if (data.tokenType == TokenType.ERC721) {
-            _withdrawERC721(data.token, data.to, data.rewardTokenId);
+            _withdrawERC721(data.token, data.to, data.tokenId);
         } else if (data.tokenType == TokenType.ERC1155) {
-            _withdrawERC1155(data.token, data.to, data.amount, data.rewardTokenId);
+            _withdrawERC1155(data.token, data.to, data.amount, data.tokenId);
         } else {
             return;
         }
 
         emit RewardClaimed(
-            data.taskId, data.to, data.nonce, data.amount, data.rewardTokenId, uint8(data.tokenType)
+            data.taskId, data.to, data.nonce, data.amount, data.tokenId, uint8(data.tokenType)
         );
     }
 
@@ -123,11 +125,12 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
             data.taskId,
             data.token,
             data.to,
-            data.amount,
-            data.rewardTokenId,
             data.tokenType,
+            data.amount,
+            data.tokenId,
             data.rakeBps,
-            data.claimFee
+            data.claimFee,
+            data.nonce
         );
     }
 
