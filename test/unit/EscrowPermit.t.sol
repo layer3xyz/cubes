@@ -459,7 +459,7 @@ contract EscrowPermitTest is Test {
             token: address(erc20Mock),
             to: bob,
             amount: reward,
-            rewardTokenId: 0,
+            tokenId: 0,
             tokenType: ITokenType.TokenType.ERC20,
             rakeBps: 300,
             claimFee: claimFee,
@@ -502,17 +502,18 @@ contract EscrowPermitTest is Test {
         return keccak256(
             abi.encode(
                 keccak256(
-                    "ClaimData(uint256 id,string source,address token,address to,uint256 amount,uint256 rewardTokenId,uint8 tokenType,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
+                    "ClaimData(uint256 id,string source,address token,address to,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
                 ),
                 data.id,
                 keccak256(bytes(data.source)),
                 data.token,
                 data.to,
                 data.amount,
-                data.rewardTokenId,
+                data.tokenId,
                 data.tokenType,
                 data.rakeBps,
-                data.claimFee
+                data.claimFee,
+                data.nonce
             )
         );
     }
