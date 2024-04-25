@@ -59,8 +59,8 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
         uint256 rakeBps;
         uint256 claimFee;
         uint256 nonce;
-		string txHash;
-		string networkChainId;
+        string txHash;
+        string networkChainId;
     }
 
     constructor(address _owner, address[] memory tokenAddr, address treasury)
