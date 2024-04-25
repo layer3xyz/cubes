@@ -457,14 +457,14 @@ contract TaskEscrowTest is Test {
             taskId: 123,
             token: address(erc20Mock),
             to: bob,
+            tokenType: ITokenType.TokenType.ERC20,
             amount: reward,
             tokenId: 0,
-            tokenType: ITokenType.TokenType.ERC20,
             rakeBps: 300,
             claimFee: claimFee,
             nonce: 0,
-			txHash: "0xaeacb8a0936dc1a06f0b22223249a4638f5f21130a689bed6a865491d3b6b034",
-			networkChainId: "evm:1"
+            txHash: "0xaeacb8a0936dc1a06f0b22223249a4638f5f21130a689bed6a865491d3b6b034",
+            networkChainId: "evm:1"
         });
 
         bytes32 structHash = getStructHash(_data);
@@ -503,17 +503,19 @@ contract TaskEscrowTest is Test {
         return keccak256(
             abi.encode(
                 keccak256(
-                    "ClaimData(uint256 id,string source,address token,address to,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
+                    "ClaimData(uint256 taskId,address token,address to,uint8 tokenType,uint256 amount,uint256 tokenId,uint256 rakeBps,uint256 claimFee,uint256 nonce,string txHash,string networkChainId)"
                 ),
                 data.taskId,
                 data.token,
                 data.to,
+                data.tokenType,
                 data.amount,
                 data.tokenId,
-                data.tokenType,
                 data.rakeBps,
                 data.claimFee,
-                data.nonce
+                data.nonce,
+                keccak256(bytes(data.txHash)),
+                keccak256(bytes(data.networkChainId))
             )
         );
     }

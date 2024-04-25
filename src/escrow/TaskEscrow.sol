@@ -27,7 +27,7 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
     error TaskEscrow__ClaimFeePayoutFailed();
 
     bytes32 internal constant CLAIM_HASH = keccak256(
-        "ClaimData(uint256 taskId,string source,address token,address to,uint8 tokenType,uint256 amount,uint256 tokenId,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
+        "ClaimData(uint256 taskId,address token,address to,uint8 tokenType,uint256 amount,uint256 tokenId,uint256 rakeBps,uint256 claimFee,uint256 nonce,string txHash,string networkChainId)"
     );
 
     mapping(uint256 => bool) internal s_sigNonces;
@@ -36,17 +36,12 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
     event RewardClaimed(
         uint256 indexed taskId,
         address indexed to,
-		uint256 indexed nonce,
+        uint256 indexed nonce,
         uint256 amount,
         uint256 tokenId,
+        address tokenAddress,
         uint8 tokenType
     );
-
-
-    /// @notice Emitted for each transaction associated with a task completion
-    /// This event is designed to support both EVM and non-EVM blockchains
-    /// @param txHash The hash of the transaction
-    /// @param networkChainId The network and chain ID of the transaction in the format <network>:<chain-id>
     event TaskTransaction(string txHash, string networkChainId);
 
     struct ClaimData {
@@ -82,9 +77,10 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
 
         emit ClaimFeePayout(msg.sender, i_treasury, msg.value);
 
-		if (bytes(data.txHash).length > 0) {
-			emit TaskTransaction(data.txHash, data.networkChainId);
-		}
+        // emit transaction event
+        if (bytes(data.txHash).length > 0) {
+            emit TaskTransaction(data.txHash, data.networkChainId);
+        }
 
         // withdraw reward
         if (data.tokenType == TokenType.NATIVE) {
@@ -100,7 +96,13 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
         }
 
         emit RewardClaimed(
-            data.taskId, data.to, data.nonce, data.amount, data.tokenId, uint8(data.tokenType)
+            data.taskId,
+            data.to,
+            data.nonce,
+            data.amount,
+            data.tokenId,
+            data.token,
+            uint8(data.tokenType)
         );
     }
 
@@ -130,7 +132,9 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
             data.tokenId,
             data.rakeBps,
             data.claimFee,
-            data.nonce
+            data.nonce,
+            keccak256(bytes(data.txHash)),
+            keccak256(bytes(data.networkChainId))
         );
     }
 
