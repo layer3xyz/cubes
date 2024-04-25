@@ -27,7 +27,7 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
     error EscrowPermit__ClaimFeePayoutFailed();
 
     bytes32 internal constant CLAIM_HASH = keccak256(
-        "ClaimData(uint256 id,string source,address token,address to,uint256 amount,uint256 rewardTokenId,uint8 tokenType,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
+        "ClaimData(uint256 id,string source,address token,address to,uint8 tokenType,uint256 amount,uint256 tokenId,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
     );
 
     mapping(uint256 => bool) internal s_sigNonces;
@@ -37,7 +37,7 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
         uint256 indexed id,
         address indexed to,
         uint256 amount,
-        uint256 rewardTokenId,
+        uint256 tokenId,
         uint8 tokenType,
         string source
     );
@@ -47,9 +47,9 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
         string source;
         address token;
         address to;
-        uint256 amount;
-        uint256 rewardTokenId;
         TokenType tokenType;
+        uint256 amount;
+        uint256 tokenId;
         uint256 rakeBps;
         uint256 claimFee;
         uint256 nonce;
@@ -66,10 +66,12 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
         if (msg.value < data.claimFee) {
             revert EscrowPermit__InsufficientClaimFee();
         }
+
         (bool success,) = i_treasury.call{value: msg.value}("");
         if (!success) {
             revert EscrowPermit__ClaimFeePayoutFailed();
         }
+
         emit ClaimFeePayout(msg.sender, i_treasury, msg.value);
 
         // withdraw reward
@@ -78,14 +80,14 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
         } else if (data.tokenType == TokenType.ERC20) {
             _withdrawERC20(data.token, data.to, data.amount, data.rakeBps);
         } else if (data.tokenType == TokenType.ERC721) {
-            _withdrawERC721(data.token, data.to, data.rewardTokenId);
+            _withdrawERC721(data.token, data.to, data.tokenId);
         } else if (data.tokenType == TokenType.ERC1155) {
-            _withdrawERC1155(data.token, data.to, data.amount, data.rewardTokenId);
+            _withdrawERC1155(data.token, data.to, data.amount, data.tokenId);
         } else {
             return;
         }
         emit RewardClaimed(
-            data.id, data.to, data.amount, data.rewardTokenId, uint8(data.tokenType), data.source
+            data.id, data.to, data.amount, data.tokenId, uint8(data.tokenType), data.source
         );
     }
 
@@ -111,11 +113,12 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
             keccak256(bytes(data.source)),
             data.token,
             data.to,
-            data.amount,
-            data.rewardTokenId,
             data.tokenType,
+            data.amount,
+            data.tokenId,
             data.rakeBps,
-            data.claimFee
+            data.claimFee,
+            data.nonce
         );
     }
 
