@@ -5,7 +5,7 @@ import {Test, console, Vm, stdError} from "forge-std/Test.sol";
 
 import {DeployEscrow} from "../../script/DeployEscrow.s.sol";
 import {Escrow} from "../../src/escrow/Escrow.sol";
-import {EscrowPermit} from "../../src/escrow/EscrowPermit.sol";
+import {TaskEscrow} from "../../src/escrow/TaskEscrow.sol";
 
 import {MockERC20} from "../mock/MockERC20.sol";
 import {MockERC721} from "../mock/MockERC721.sol";
@@ -18,7 +18,7 @@ import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC1155} from "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
 import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
-contract EscrowPermitTest is Test {
+contract TaskEscrowTest is Test {
     using MessageHashUtils for bytes32;
 
     DeployEscrow public deployer;
@@ -45,8 +45,8 @@ contract EscrowPermitTest is Test {
     address public notAdminAddress;
     uint256 internal notAdminPrivKey;
 
-    address public escrowPermitAddr;
-    EscrowPermit public escrowPermitMock;
+    address public taskEscrowAddr;
+    TaskEscrow public taskEscrowMock;
     MockERC20 public erc20Mock;
     MockERC721 public erc721Mock;
     MockERC1155 public erc1155Mock;
@@ -78,8 +78,8 @@ contract EscrowPermitTest is Test {
         erc721Mock = MockERC721(erc721);
         erc1155Mock = MockERC1155(erc1155);
 
-        escrowPermitMock = new EscrowPermit(adminAddress, whitelistedTokens, treasury);
-        escrowPermitAddr = address(escrowPermitMock);
+        taskEscrowMock = new TaskEscrow(adminAddress, whitelistedTokens, treasury);
+        taskEscrowAddr = address(taskEscrowMock);
     }
 
     ///////////////////////////////////////////////////////////////////////
@@ -87,13 +87,13 @@ contract EscrowPermitTest is Test {
     ///////////////////////////////////////////////////////////////////////
     function testDepositNative(uint256 amount) public {
         hoax(adminAddress, amount);
-        uint256 preBalEscrow = escrowPermitAddr.balance;
+        uint256 preBalEscrow = taskEscrowAddr.balance;
         uint256 preBalAdmin = adminAddress.balance;
 
-        (bool success,) = address(escrowPermitAddr).call{value: amount}("");
+        (bool success,) = address(taskEscrowAddr).call{value: amount}("");
         require(success, "native deposit failed");
 
-        uint256 postBalEscrow = escrowPermitAddr.balance;
+        uint256 postBalEscrow = taskEscrowAddr.balance;
         uint256 postBalAdmin = adminAddress.balance;
 
         assertEq(postBalEscrow, preBalEscrow + amount);
@@ -101,7 +101,7 @@ contract EscrowPermitTest is Test {
     }
 
     function testDepositERC20(uint256 amount) public {
-        uint256 preBalance = erc20Mock.balanceOf(escrowPermitAddr);
+        uint256 preBalance = erc20Mock.balanceOf(taskEscrowAddr);
 
         uint256 preBalanceAdmin = erc20Mock.balanceOf(adminAddress);
         if (amount > preBalanceAdmin) {
@@ -110,33 +110,33 @@ contract EscrowPermitTest is Test {
 
         vm.startBroadcast(adminAddress);
 
-        erc20Mock.transfer(escrowPermitAddr, amount);
+        erc20Mock.transfer(taskEscrowAddr, amount);
         vm.stopBroadcast();
 
-        uint256 postBalance = erc20Mock.balanceOf(escrowPermitAddr);
+        uint256 postBalance = erc20Mock.balanceOf(taskEscrowAddr);
 
         assertEq(postBalance, preBalance + amount);
     }
 
     function testDepositERC721() public {
-        uint256 preBalance = erc721Mock.balanceOf(escrowPermitAddr);
+        uint256 preBalance = erc721Mock.balanceOf(taskEscrowAddr);
         vm.startBroadcast(adminAddress);
-        erc721Mock.safeTransferFrom(adminAddress, escrowPermitAddr, 2);
+        erc721Mock.safeTransferFrom(adminAddress, taskEscrowAddr, 2);
         vm.stopBroadcast();
 
-        uint256 postBalance = erc721Mock.balanceOf(escrowPermitAddr);
+        uint256 postBalance = erc721Mock.balanceOf(taskEscrowAddr);
 
         assertEq(postBalance, preBalance + 1);
-        assertEq(erc721Mock.ownerOf(2), escrowPermitAddr);
+        assertEq(erc721Mock.ownerOf(2), taskEscrowAddr);
     }
 
     function testDepositERC1155() public {
-        uint256 preBalance = erc1155Mock.balanceOf(escrowPermitAddr, 0);
+        uint256 preBalance = erc1155Mock.balanceOf(taskEscrowAddr, 0);
         vm.startBroadcast(adminAddress);
-        erc1155Mock.safeTransferFrom(adminAddress, escrowPermitAddr, 0, 1, "0x00");
+        erc1155Mock.safeTransferFrom(adminAddress, taskEscrowAddr, 0, 1, "0x00");
         vm.stopBroadcast();
 
-        uint256 postBalance = erc1155Mock.balanceOf(escrowPermitAddr, 0);
+        uint256 postBalance = erc1155Mock.balanceOf(taskEscrowAddr, 0);
 
         assertEq(postBalance, preBalance + 1);
     }
@@ -150,7 +150,7 @@ contract EscrowPermitTest is Test {
 
         uint256 rakeBps = 300;
         vm.startBroadcast(adminAddress);
-        escrowPermitMock.withdrawNative(bob, amount, rakeBps);
+        taskEscrowMock.withdrawNative(bob, amount, rakeBps);
         vm.stopBroadcast();
 
         uint256 postBalTreasury = treasury.balance;
@@ -168,7 +168,7 @@ contract EscrowPermitTest is Test {
         uint256 amount = 1e18;
         uint256 rakeBps = 300;
         vm.prank(adminAddress);
-        escrowPermitMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
+        taskEscrowMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
 
         uint256 postBalTreasury = erc20Mock.balanceOf(treasury);
         uint256 postBalBob = erc20Mock.balanceOf(bob);
@@ -184,12 +184,12 @@ contract EscrowPermitTest is Test {
         address preOwnerOf = erc721Mock.ownerOf(2);
 
         vm.startBroadcast(adminAddress);
-        escrowPermitMock.withdrawERC721(address(erc721Mock), bob, 2);
+        taskEscrowMock.withdrawERC721(address(erc721Mock), bob, 2);
         vm.stopBroadcast();
 
         address postOwnerOf = erc721Mock.ownerOf(2);
 
-        assertEq(preOwnerOf, escrowPermitAddr);
+        assertEq(preOwnerOf, taskEscrowAddr);
         assertEq(postOwnerOf, bob);
     }
 
@@ -199,7 +199,7 @@ contract EscrowPermitTest is Test {
         uint256 preBal = erc1155Mock.balanceOf(bob, 0);
 
         vm.prank(adminAddress);
-        escrowPermitMock.withdrawERC1155(address(erc1155Mock), bob, 1, 0);
+        taskEscrowMock.withdrawERC1155(address(erc1155Mock), bob, 1, 0);
 
         uint256 postBal = erc1155Mock.balanceOf(bob, 0);
 
@@ -215,10 +215,10 @@ contract EscrowPermitTest is Test {
 
         // deposit
         uint256 amount = 10;
-        MockERC20(token).transfer(escrowPermitAddr, amount);
+        MockERC20(token).transfer(taskEscrowAddr, amount);
 
         vm.expectRevert(Escrow.Escrow__TokenNotWhitelisted.selector);
-        escrowPermitMock.withdrawERC20(token, bob, amount, 300);
+        taskEscrowMock.withdrawERC20(token, bob, amount, 300);
 
         vm.stopBroadcast();
     }
@@ -226,14 +226,14 @@ contract EscrowPermitTest is Test {
     function testWithdrawZeroTokenAddress() public {
         vm.prank(adminAddress);
         vm.expectRevert(Escrow.Escrow__TokenNotWhitelisted.selector);
-        escrowPermitMock.withdrawERC20(address(0), bob, 10, 300);
+        taskEscrowMock.withdrawERC20(address(0), bob, 10, 300);
     }
 
     function testWithdrawZeroToAddress() public {
         testDepositERC20(10e18);
         vm.prank(adminAddress);
         vm.expectRevert();
-        escrowPermitMock.withdrawERC20(address(erc20Mock), address(0), 10, 300);
+        taskEscrowMock.withdrawERC20(address(erc20Mock), address(0), 10, 300);
     }
 
     function testWithdrawNativeToZeroAddress(uint256 amount) public {
@@ -243,7 +243,7 @@ contract EscrowPermitTest is Test {
 
         vm.prank(adminAddress);
         vm.expectRevert(Escrow.Escrow__ZeroAddress.selector);
-        escrowPermitMock.withdrawNative(address(0), amount, 300);
+        taskEscrowMock.withdrawNative(address(0), amount, 300);
     }
 
     function testWhitelistToken() public {
@@ -254,17 +254,17 @@ contract EscrowPermitTest is Test {
 
         // deposit
         uint256 amount = 10;
-        MockERC20(token).transfer(escrowPermitAddr, amount);
+        MockERC20(token).transfer(taskEscrowAddr, amount);
 
         // it'll revert since token isn't whitelisted
         vm.expectRevert(Escrow.Escrow__TokenNotWhitelisted.selector);
-        escrowPermitMock.withdrawERC20(token, bob, amount, 0);
+        taskEscrowMock.withdrawERC20(token, bob, amount, 0);
 
         // whitelist token
-        escrowPermitMock.addTokenToWhitelist(token);
+        taskEscrowMock.addTokenToWhitelist(token);
 
         // withdraw to bob
-        escrowPermitMock.withdrawERC20(token, bob, amount, 0);
+        taskEscrowMock.withdrawERC20(token, bob, amount, 0);
         vm.stopBroadcast();
 
         // verify balance
@@ -283,7 +283,7 @@ contract EscrowPermitTest is Test {
         vm.startBroadcast(adminAddress);
 
         vm.expectRevert(Escrow.Escrow__InvalidRakeBps.selector);
-        escrowPermitMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
+        taskEscrowMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
         vm.stopBroadcast();
     }
 
@@ -293,7 +293,7 @@ contract EscrowPermitTest is Test {
         uint256 amount = 1e18;
         uint256 rakeBps = 0;
         vm.startBroadcast(adminAddress);
-        escrowPermitMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
+        taskEscrowMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
         vm.stopBroadcast();
 
         uint256 postBalTreasury = erc20Mock.balanceOf(treasury);
@@ -312,7 +312,7 @@ contract EscrowPermitTest is Test {
         vm.startBroadcast(adminAddress);
 
         vm.expectRevert(Escrow.Escrow__InsufficientEscrowBalance.selector);
-        escrowPermitMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
+        taskEscrowMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
         vm.stopBroadcast();
     }
 
@@ -328,7 +328,7 @@ contract EscrowPermitTest is Test {
         bytes4 selector = bytes4(keccak256("OwnableUnauthorizedAccount(address)"));
         bytes memory expectedError = abi.encodeWithSelector(selector, alice);
         vm.expectRevert(expectedError);
-        escrowPermitMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
+        taskEscrowMock.withdrawERC20(address(erc20Mock), bob, amount, rakeBps);
     }
 
     function testChangeOwner() public {
@@ -338,44 +338,44 @@ contract EscrowPermitTest is Test {
         bytes memory expectedError = abi.encodeWithSelector(selector, alice);
         vm.expectRevert(expectedError);
         vm.prank(alice);
-        escrowPermitMock.addTokenToWhitelist(token);
+        taskEscrowMock.addTokenToWhitelist(token);
 
-        address owner = escrowPermitMock.owner();
+        address owner = taskEscrowMock.owner();
         assert(owner == adminAddress);
 
         vm.prank(adminAddress);
-        escrowPermitMock.transferOwnership(alice);
+        taskEscrowMock.transferOwnership(alice);
 
-        address pendingOwner = escrowPermitMock.pendingOwner();
+        address pendingOwner = taskEscrowMock.pendingOwner();
         assert(pendingOwner == alice);
-        address stillOwner = escrowPermitMock.owner();
+        address stillOwner = taskEscrowMock.owner();
         assert(stillOwner == adminAddress);
 
         vm.prank(alice);
-        escrowPermitMock.acceptOwnership();
-        address newOwner = escrowPermitMock.owner();
+        taskEscrowMock.acceptOwnership();
+        address newOwner = taskEscrowMock.owner();
         assert(newOwner == alice);
 
         vm.prank(alice);
-        escrowPermitMock.addTokenToWhitelist(token);
+        taskEscrowMock.addTokenToWhitelist(token);
 
-        assert(escrowPermitMock.s_whitelistedTokens(token));
+        assert(taskEscrowMock.s_whitelistedTokens(token));
     }
 
     function testRenounceOwnership() public {
         vm.prank(adminAddress);
 
         // we overwrite this function since there'll never be a case where we want to do this
-        escrowPermitMock.renounceOwnership();
+        taskEscrowMock.renounceOwnership();
 
         // make sure transfership wasn't renounced
-        address owner = escrowPermitMock.owner();
+        address owner = taskEscrowMock.owner();
         assert(owner == adminAddress);
     }
 
     function testEscrowERC165Interface() public {
         // ERC165 - 0x01ffc9a7
-        assertEq(escrowPermitMock.supportsInterface(0x01ffc9a7), true);
+        assertEq(taskEscrowMock.supportsInterface(0x01ffc9a7), true);
     }
 
     function testERC1155BatchDeposit() public {
@@ -386,12 +386,12 @@ contract EscrowPermitTest is Test {
         for (uint256 i = 0; i < amounts.length; i++) {
             ids[i] = i;
             amounts[i] = amount;
-            escrowAddresses[i] = escrowPermitAddr;
+            escrowAddresses[i] = taskEscrowAddr;
             erc1155Mock.mint(adminAddress, 10, i);
         }
 
         vm.startBroadcast(adminAddress);
-        erc1155Mock.safeBatchTransferFrom(adminAddress, escrowPermitAddr, ids, amounts, "0x00");
+        erc1155Mock.safeBatchTransferFrom(adminAddress, taskEscrowAddr, ids, amounts, "0x00");
         vm.stopBroadcast();
 
         uint256[] memory postBalances = erc1155Mock.balanceOfBatch(escrowAddresses, ids);
@@ -403,10 +403,10 @@ contract EscrowPermitTest is Test {
         vm.prank(adminAddress);
         uint256 tokenId = 1;
 
-        escrowPermitMock.withdrawERC1155(address(erc1155Mock), bob, amount, tokenId);
+        taskEscrowMock.withdrawERC1155(address(erc1155Mock), bob, amount, tokenId);
 
         uint256 escrow1155Balance =
-            escrowPermitMock.escrowERC1155Reserves(address(erc1155Mock), tokenId);
+            taskEscrowMock.escrowERC1155Reserves(address(erc1155Mock), tokenId);
         assert(escrow1155Balance == 0);
         assert(erc1155Mock.balanceOf(bob, tokenId) == amount);
     }
@@ -422,28 +422,28 @@ contract EscrowPermitTest is Test {
     }
 
     function depositERC721ToEscrow() public {
-        IERC721(erc721Mock).transferFrom(adminAddress, escrowPermitAddr, 1);
+        IERC721(erc721Mock).transferFrom(adminAddress, taskEscrowAddr, 1);
     }
 
     function testDepositWithoutData(uint256 amount) public {
         amount = bound(amount, 0, type(uint256).max);
         hoax(alice, amount);
-        (bool success,) = escrowPermitAddr.call{value: amount}("");
+        (bool success,) = taskEscrowAddr.call{value: amount}("");
         assert(success);
-        assert(escrowPermitAddr.balance == amount);
+        assert(taskEscrowAddr.balance == amount);
     }
 
     function testDepositWithData(uint256 amount) public {
         amount = bound(amount, 0, type(uint256).max);
         hoax(alice, amount);
-        (bool success,) = escrowPermitAddr.call{value: amount}("some data");
+        (bool success,) = taskEscrowAddr.call{value: amount}("some data");
         assert(success);
-        assert(escrowPermitAddr.balance == amount);
+        assert(taskEscrowAddr.balance == amount);
     }
 
     function depositNativeToEscrow() public {
         hoax(adminAddress, 50 ether);
-        (bool success,) = payable(escrowPermitAddr).call{value: 10 ether}("");
+        (bool success,) = payable(taskEscrowAddr).call{value: 10 ether}("");
         assert(success);
     }
 
@@ -453,17 +453,18 @@ contract EscrowPermitTest is Test {
         uint256 claimFee = 0.1 ether;
         uint256 reward = 100;
 
-        EscrowPermit.ClaimData memory _data = EscrowPermit.ClaimData({
-            id: 123,
-            source: "test",
+        TaskEscrow.ClaimData memory _data = TaskEscrow.ClaimData({
+            taskId: 123,
             token: address(erc20Mock),
             to: bob,
+            tokenType: ITokenType.TokenType.ERC20,
             amount: reward,
             tokenId: 0,
-            tokenType: ITokenType.TokenType.ERC20,
             rakeBps: 300,
             claimFee: claimFee,
-            nonce: 0
+            nonce: 0,
+            txHash: "0xaeacb8a0936dc1a06f0b22223249a4638f5f21130a689bed6a865491d3b6b034",
+            networkChainId: "evm:1"
         });
 
         bytes32 structHash = getStructHash(_data);
@@ -477,7 +478,7 @@ contract EscrowPermitTest is Test {
         uint256 preBalance = bob.balance;
         uint256 preERC20Balance = erc20Mock.balanceOf(bob);
 
-        escrowPermitMock.claimReward{value: claimFee}(_data, signature);
+        taskEscrowMock.claimReward{value: claimFee}(_data, signature);
 
         uint256 erc20Amount = erc20Mock.balanceOf(bob);
         uint256 postBalance = bob.balance;
@@ -489,31 +490,32 @@ contract EscrowPermitTest is Test {
         assert(postBalance == preBalance - claimFee);
         assert(treasury.balance == claimFee);
 
-        uint256 contractERC20Balance = erc20Mock.balanceOf(escrowPermitAddr);
+        uint256 contractERC20Balance = erc20Mock.balanceOf(taskEscrowAddr);
 
         address withdrawalAddr = makeAddr("withdrawal");
         vm.prank(adminAddress);
-        escrowPermitMock.withdrawERC20(address(erc20Mock), withdrawalAddr, contractERC20Balance, 0);
+        taskEscrowMock.withdrawERC20(address(erc20Mock), withdrawalAddr, contractERC20Balance, 0);
 
         assert(erc20Mock.balanceOf(withdrawalAddr) == contractERC20Balance);
     }
 
-    function getStructHash(EscrowPermit.ClaimData memory data) public pure returns (bytes32) {
+    function getStructHash(TaskEscrow.ClaimData memory data) public pure returns (bytes32) {
         return keccak256(
             abi.encode(
                 keccak256(
-                    "ClaimData(uint256 id,string source,address token,address to,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
+                    "ClaimData(uint256 taskId,address token,address to,uint8 tokenType,uint256 amount,uint256 tokenId,uint256 rakeBps,uint256 claimFee,uint256 nonce,string txHash,string networkChainId)"
                 ),
-                data.id,
-                keccak256(bytes(data.source)),
+                data.taskId,
                 data.token,
                 data.to,
+                data.tokenType,
                 data.amount,
                 data.tokenId,
-                data.tokenType,
                 data.rakeBps,
                 data.claimFee,
-                data.nonce
+                data.nonce,
+                keccak256(bytes(data.txHash)),
+                keccak256(bytes(data.networkChainId))
             )
         );
     }
@@ -527,7 +529,7 @@ contract EscrowPermitTest is Test {
                 keccak256(bytes(SIGNATURE_DOMAIN)),
                 keccak256(bytes(SIGNING_VERSION)),
                 block.chainid,
-                escrowPermitAddr
+                taskEscrowAddr
             )
         );
     }

@@ -18,33 +18,34 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {Escrow} from "./Escrow.sol";
 import {ITokenType} from "./interfaces/ITokenType.sol";
 
-contract EscrowPermit is EIP712, ITokenType, Escrow {
+contract TaskEscrow is EIP712, ITokenType, Escrow {
     using ECDSA for bytes32;
 
-    error EscrowPermit__SignerIsNotOwner();
-    error EscrowPermit__NonceAlreadyUsed();
-    error EscrowPermit__InsufficientClaimFee();
-    error EscrowPermit__ClaimFeePayoutFailed();
+    error TaskEscrow__SignerIsNotOwner();
+    error TaskEscrow__NonceAlreadyUsed();
+    error TaskEscrow__InsufficientClaimFee();
+    error TaskEscrow__ClaimFeePayoutFailed();
 
     bytes32 internal constant CLAIM_HASH = keccak256(
-        "ClaimData(uint256 id,string source,address token,address to,uint8 tokenType,uint256 amount,uint256 tokenId,uint256 rakeBps,uint256 claimFee,uint256 nonce)"
+        "ClaimData(uint256 taskId,address token,address to,uint8 tokenType,uint256 amount,uint256 tokenId,uint256 rakeBps,uint256 claimFee,uint256 nonce,string txHash,string networkChainId)"
     );
 
     mapping(uint256 => bool) internal s_sigNonces;
 
     event ClaimFeePayout(address indexed payer, address indexed treasury, uint256 amount);
     event RewardClaimed(
-        uint256 indexed id,
+        uint256 indexed taskId,
         address indexed to,
+        uint256 indexed nonce,
         uint256 amount,
         uint256 tokenId,
-        uint8 tokenType,
-        string source
+        address tokenAddress,
+        uint8 tokenType
     );
+    event TaskTransaction(string txHash, string networkChainId);
 
     struct ClaimData {
-        uint256 id;
-        string source;
+        uint256 taskId;
         address token;
         address to;
         TokenType tokenType;
@@ -53,6 +54,8 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
         uint256 rakeBps;
         uint256 claimFee;
         uint256 nonce;
+        string txHash;
+        string networkChainId;
     }
 
     constructor(address _owner, address[] memory tokenAddr, address treasury)
@@ -64,15 +67,20 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
         _validateSignature(data, signature);
 
         if (msg.value < data.claimFee) {
-            revert EscrowPermit__InsufficientClaimFee();
+            revert TaskEscrow__InsufficientClaimFee();
         }
 
         (bool success,) = i_treasury.call{value: msg.value}("");
         if (!success) {
-            revert EscrowPermit__ClaimFeePayoutFailed();
+            revert TaskEscrow__ClaimFeePayoutFailed();
         }
 
         emit ClaimFeePayout(msg.sender, i_treasury, msg.value);
+
+        // emit transaction event
+        if (bytes(data.txHash).length > 0) {
+            emit TaskTransaction(data.txHash, data.networkChainId);
+        }
 
         // withdraw reward
         if (data.tokenType == TokenType.NATIVE) {
@@ -86,18 +94,25 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
         } else {
             return;
         }
+
         emit RewardClaimed(
-            data.id, data.to, data.amount, data.tokenId, uint8(data.tokenType), data.source
+            data.taskId,
+            data.to,
+            data.nonce,
+            data.amount,
+            data.tokenId,
+            data.token,
+            uint8(data.tokenType)
         );
     }
 
     function _validateSignature(ClaimData calldata data, bytes calldata signature) internal {
         address signer = _getSigner(data, signature);
         if (signer != owner()) {
-            revert EscrowPermit__SignerIsNotOwner();
+            revert TaskEscrow__SignerIsNotOwner();
         }
         if (s_sigNonces[data.nonce]) {
-            revert EscrowPermit__NonceAlreadyUsed();
+            revert TaskEscrow__NonceAlreadyUsed();
         }
         s_sigNonces[data.nonce] = true;
     }
@@ -109,8 +124,7 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
     function _getStructHash(ClaimData calldata data) internal pure returns (bytes memory) {
         return abi.encode(
             CLAIM_HASH,
-            data.id,
-            keccak256(bytes(data.source)),
+            data.taskId,
             data.token,
             data.to,
             data.tokenType,
@@ -118,7 +132,9 @@ contract EscrowPermit is EIP712, ITokenType, Escrow {
             data.tokenId,
             data.rakeBps,
             data.claimFee,
-            data.nonce
+            data.nonce,
+            keccak256(bytes(data.txHash)),
+            keccak256(bytes(data.networkChainId))
         );
     }
 
