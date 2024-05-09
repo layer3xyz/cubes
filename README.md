@@ -1,7 +1,7 @@
 <p align="center">
    <br>
      <a href="https://layer3.xyz" target="_blank">
-      <img width="207" height="55" src="./assets/layer3.png">
+      <img width="300" height="55" src="./assets/layer3.png">
      </a>
    <br>
    <br>
