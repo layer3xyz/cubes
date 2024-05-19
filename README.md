@@ -8,7 +8,7 @@
 </p>
 
 [![Twitter](https://img.shields.io/twitter/follow/layer3xyz?color=blue&style=flat-square)](https://twitter.com/layer3xyz)
-[![Discord](https://img.shields.io/discord/884514862737281024?color=green&style=flat-square&logo=discord)](https://discordapp.com/layer3)
+[![Discord](https://img.shields.io/discord/884514862737281024?color=green&style=flat-square&logo=discord)](https://discord.com/invite/layer3)
 [![LICENSE](https://img.shields.io/badge/license-Apache--2.0-blue?logo=apache)](https://github.com/layer3xyz/cube-contracts/blob/main/LICENSE)
 
 ```
