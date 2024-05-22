@@ -238,7 +238,8 @@ contract CUBE is
         string memory _tokenSymbol,
         string memory _signingDomain,
         string memory _signatureVersion,
-        address _admin
+        address _admin,
+        address operatorAllowlist_ // OAL contract address
     ) external initializer {
         __ERC721_init(_tokenName, _tokenSymbol);
         __EIP712_init(_signingDomain, _signatureVersion);
@@ -247,6 +248,7 @@ contract CUBE is
         __ReentrancyGuard_init();
         s_isMintingActive = true;
 
+        _setOperatorAllowlistRegistry(operatorAllowlist_);
         _grantRole(DEFAULT_ADMIN_ROLE, _admin);
     }
 
@@ -620,9 +622,6 @@ contract CUBE is
         string[] memory tags
     ) external onlyRole(SIGNER_ROLE) {
         s_quests[questId] = true;
-        _setOperatorAllowlistRegistry(
-            address(0x6b969FD89dE634d8DE3271EbE97734FEFfcd58eE)
-        ); // Testnet address. Change this for mainnet deployment
         emit QuestMetadata(questId, questType, difficulty, title, tags, communities);
     }
 
