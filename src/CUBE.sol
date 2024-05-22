@@ -24,6 +24,7 @@ import {ReentrancyGuardUpgradeable} from
     "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {IFactory} from "./escrow/interfaces/IFactory.sol";
 import {ITokenType} from "./escrow/interfaces/ITokenType.sol";
+import {OperatorAllowlistEnforced} from "./operatorAllowlist/OperatorAllowlistEnforced.sol";
 
 /// @title CUBE
 /// @dev Implementation of an NFT smart contract with EIP712 signatures.
@@ -36,7 +37,8 @@ contract CUBE is
     UUPSUpgradeable,
     EIP712Upgradeable,
     ReentrancyGuardUpgradeable,
-    ITokenType
+    ITokenType,
+    OperatorAllowlistEnforced
 {
     using ECDSA for bytes32;
 
@@ -618,8 +620,44 @@ contract CUBE is
         string[] memory tags
     ) external onlyRole(SIGNER_ROLE) {
         s_quests[questId] = true;
+        _setOperatorAllowlistRegistry(
+            address(0x6b969FD89dE634d8DE3271EbE97734FEFfcd58eE)
+        ); // Testnet address. Change this for mainnet deployment
         emit QuestMetadata(questId, questType, difficulty, title, tags, communities);
     }
+
+
+     function approve(
+        address to,
+        uint256 tokenId
+    ) public virtual override(ERC721Upgradeable) validateApproval(to) {
+        super.approve(to, tokenId);
+    }
+
+    function setApprovalForAll(
+        address operator,
+        bool approved
+    ) public virtual override(ERC721Upgradeable) validateApproval(operator) {
+        super.setApprovalForAll(operator, approved);
+    }
+
+    function _safeTransfer(
+        address from,
+        address to,
+        uint256 tokenId,
+        bytes memory _data
+    ) internal virtual override(ERC721Upgradeable) validateTransfer(from, to) {
+        super._safeTransfer(from, to, tokenId, _data);
+    }
+
+        function transferFrom(
+        address from,
+        address to,
+        uint256 tokenId
+    ) public virtual override(ERC721Upgradeable) validateTransfer(from, to) {
+        super.transferFrom(from, to, tokenId);
+    }
+
 
     /// @notice Unpublishes and disables a quest
     /// @dev Can only be called by an account with the signer role
