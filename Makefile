@@ -6,7 +6,7 @@ DEFAULT_ANVIL_PRIVATE_KEY := 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efca
 
 install:; forge install
 build:; forge build
-test :; forge test --ffi
+test :; forge clean && forge test --ffi
 coverage :; forge coverage --ffi --report debug > coverage-report.txt
 snapshot :; forge snapshot --ffi
 

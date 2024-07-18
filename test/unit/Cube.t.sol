@@ -153,6 +153,8 @@ contract CubeTest is Test {
 
         helper = new Helper();
 
+        vm.stopPrank();
+        
         // contract warm up
         _mintCube();
 
