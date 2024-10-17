@@ -24,6 +24,8 @@ import {ReentrancyGuardUpgradeable} from
     "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import {IFactory} from "./escrow/interfaces/IFactory.sol";
 import {ITokenType} from "./escrow/interfaces/ITokenType.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {console} from "forge-std/Test.sol";
 
 /// @title CUBE
 /// @dev Implementation of an NFT smart contract with EIP712 signatures.
@@ -51,6 +53,9 @@ contract CUBE is
     error CUBE__ExcessiveFeePayout();
     error CUBE__ExceedsContractBalance();
     error CUBE__QuestNotActive();
+    error CUBE__NativePaymentFailed();
+    error CUBE__ERC20TransferFailed();
+    error CUBE__ExceedsContractAllowance();
 
     uint256 internal s_nextTokenId;
     bool public s_isMintingActive;
@@ -66,13 +71,18 @@ contract CUBE is
         "RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress)"
     );
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 nonce,uint256 price,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress)TransactionData(string txHash,string networkChainId)"
+        "CubeData(uint256 questId,uint256 nonce,uint256 price,bool isNative,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress)TransactionData(string txHash,string networkChainId)"
     );
 
     mapping(uint256 => uint256) internal s_questIssueNumbers;
     mapping(uint256 => string) internal s_tokenURIs;
     mapping(uint256 nonce => bool isConsumed) internal s_nonces;
     mapping(uint256 => bool) internal s_quests;
+
+    address public s_treasury;
+    address public s_l3Token;
+    bytes4 private constant TRANSFER_ERC20 =
+        bytes4(keccak256(bytes("transferFrom(address,address,uint256)")));
 
     enum QuestType {
         QUEST,
@@ -154,11 +164,14 @@ contract CUBE is
     event ContractWithdrawal(uint256 amount);
 
     event QuestDisabled(uint256 indexed questId);
+    event UpdatedTreasury(address indexed newTreasury);
+    event UpdatedL3Address(address indexed token);
 
     /// @dev Represents the data needed for minting a CUBE.
     /// @param questId The ID of the quest associated with the CUBE
     /// @param nonce A unique number to prevent replay attacks
     /// @param price The price paid for minting the CUBE
+    /// @param isNative If the price is paid in native currency or with L3
     /// @param toAddress The address where the CUBE will be minted
     /// @param walletProvider The wallet provider used for the transaction
     /// @param tokenURI The URI pointing to the CUBE's metadata
@@ -170,6 +183,7 @@ contract CUBE is
         uint256 questId;
         uint256 nonce;
         uint256 price;
+        bool isNative;
         address toAddress;
         string walletProvider;
         string tokenURI;
@@ -221,7 +235,7 @@ contract CUBE is
 
     /// @notice Returns the version of the CUBE smart contract
     function cubeVersion() external pure returns (string memory) {
-        return "2";
+        return "3";
     }
 
     /// @notice Initializes the CUBE contract with necessary parameters
@@ -284,53 +298,14 @@ contract CUBE is
             revert CUBE__MintingIsNotActive();
         }
 
-        // Check if the sent value is at least equal to the calculated total fee
-        if (msg.value < cubeData.price) {
-            revert CUBE__FeeNotEnough();
+        if (cubeData.isNative) {
+            // Check if the sent value is at least equal to the calculated total fee
+            if (msg.value < cubeData.price) {
+                revert CUBE__FeeNotEnough();
+            }
         }
 
         _mintCube(cubeData, signature);
-    }
-
-    /// @notice Mints multiple cubes based on provided data and signatures
-    /// @dev Checks if minting is active, matches cube data with signatures, and processes each mint.
-    /// @param cubeData Array of CubeData structures containing minting information
-    /// @param signatures Array of signatures corresponding to each CubeData
-    function mintCubes(CubeData[] calldata cubeData, bytes[] calldata signatures)
-        external
-        payable
-        nonReentrant
-    {
-        // Check if the minting function is currently active. If not, revert the transaction
-        if (!s_isMintingActive) {
-            revert CUBE__MintingIsNotActive();
-        }
-        // Ensure that each CubeData entry has a corresponding signature
-        if (cubeData.length != signatures.length) {
-            revert CUBE__SignatureAndCubesInputMismatch();
-        }
-
-        // Calculate the total fee required for all the minting requests
-        uint256 totalFee;
-        for (uint256 i = 0; i < cubeData.length;) {
-            totalFee = totalFee + cubeData[i].price;
-            unchecked {
-                ++i;
-            }
-        }
-
-        // Check if the sent value is at least equal to the calculated total fee
-        if (msg.value < totalFee) {
-            revert CUBE__FeeNotEnough();
-        }
-
-        // Loop through each CubeData entry and mint a CUBE
-        for (uint256 i = 0; i < cubeData.length;) {
-            _mintCube(cubeData[i], signatures[i]);
-            unchecked {
-                ++i;
-            }
-        }
     }
 
     /// @notice Internal function to handle the logic of minting a single cube
@@ -363,10 +338,9 @@ contract CUBE is
             ++s_nextTokenId;
         }
 
-        // Process any payouts to fee recipients if applicable
-        if (data.recipients.length > 0) {
-            _processPayouts(data);
-        }
+        // mint fee
+        data.isNative ? _processNativePayouts(data) : _processL3Payouts(data);
+
         // Perform the actual minting of the CUBE
         _safeMint(data.toAddress, tokenId);
 
@@ -419,44 +393,105 @@ contract CUBE is
         s_nonces[data.nonce] = true;
     }
 
-    /// @notice Processes fee payouts to specified recipients
+    /// @notice Processes fee payouts to specified recipients when handling L3 payments
     /// @dev Distributes a portion of the minting fee to designated addresses based on their Basis Points (BPS)
     /// @param data The CubeData struct containing payout details
-    function _processPayouts(CubeData calldata data) internal {
+    function _processL3Payouts(CubeData calldata data) internal {
         uint256 totalAmount;
 
-        // max basis points is 10k (100%)
-        uint16 maxBps = 10_000;
-        uint256 contractBalance = address(this).balance;
-        for (uint256 i = 0; i < data.recipients.length;) {
-            if (data.recipients[i].BPS > maxBps) {
-                revert CUBE__BPSTooHigh();
-            }
-
-            // Calculate the referral amount for each recipient
-            uint256 referralAmount = (data.price * data.recipients[i].BPS) / maxBps;
-            totalAmount = totalAmount + referralAmount;
-
-            // Ensure the total payout does not exceed the cube price or contract balance
-            if (totalAmount > data.price) {
-                revert CUBE__ExcessiveFeePayout();
-            }
-            if (totalAmount > contractBalance) {
-                revert CUBE__ExceedsContractBalance();
-            }
-
-            // Transfer the referral amount to the recipient
-            address recipient = data.recipients[i].recipient;
-            if (recipient != address(0)) {
-                (bool success,) = recipient.call{value: referralAmount}("");
-                if (!success) {
-                    revert CUBE__TransferFailed();
+        // Process referral payouts to recipients
+        if (data.recipients.length > 0) {
+            // max basis points is 10k (100%)
+            uint16 maxBps = 10_000;
+            uint256 allowance = IERC20(s_l3Token).allowance(msg.sender, address(this));
+            for (uint256 i = 0; i < data.recipients.length;) {
+                if (data.recipients[i].BPS > maxBps) {
+                    revert CUBE__BPSTooHigh();
                 }
-                emit FeePayout(recipient, referralAmount);
+
+                // Calculate the referral amount for each recipient
+                uint256 referralAmount = (data.price * data.recipients[i].BPS) / maxBps;
+                totalAmount = totalAmount + referralAmount;
+
+                // Ensure the total payout does not exceed the cube price or contract allowance
+                if (totalAmount > data.price) {
+                    revert CUBE__ExcessiveFeePayout();
+                }
+                if (totalAmount > allowance) {
+                    revert CUBE__ExceedsContractAllowance();
+                }
+
+                // Transfer the referral amount to the recipient
+                address recipient = data.recipients[i].recipient;
+                if (recipient != address(0)) {
+                    (bool success, bytes memory returnData) = s_l3Token.call(
+                        abi.encodeWithSelector(
+                            TRANSFER_ERC20, msg.sender, recipient, referralAmount
+                        )
+                    );
+                    emit FeePayout(recipient, referralAmount);
+                }
+                unchecked {
+                    ++i;
+                }
             }
-            unchecked {
-                ++i;
+        }
+
+        // Transfer the remaining amount to the treasury
+        (bool success, bytes memory returnData) = s_l3Token.call(
+            abi.encodeWithSelector(TRANSFER_ERC20, msg.sender, s_treasury, data.price - totalAmount)
+        );
+        if (!success || (returnData.length > 0 && !abi.decode(returnData, (bool)))) {
+            revert CUBE__ERC20TransferFailed();
+        }
+    }
+
+    /// @notice Processes fee payouts to specified recipients when handling native payments
+    /// @dev Distributes a portion of the minting fee to designated addresses based on their Basis Points (BPS)
+    /// @param data The CubeData struct containing payout details
+    function _processNativePayouts(CubeData calldata data) internal {
+        uint256 totalReferrals;
+
+        if (data.recipients.length > 0) {
+            // max basis points is 10k (100%)
+            uint16 maxBps = 10_000;
+            uint256 contractBalance = address(this).balance;
+            for (uint256 i = 0; i < data.recipients.length;) {
+                if (data.recipients[i].BPS > maxBps) {
+                    revert CUBE__BPSTooHigh();
+                }
+
+                // Calculate the referral amount for each recipient
+                uint256 referralAmount = (data.price * data.recipients[i].BPS) / maxBps;
+                totalReferrals = totalReferrals + referralAmount;
+
+                // Ensure the total payout does not exceed the cube price or contract balance
+                if (totalReferrals > data.price) {
+                    revert CUBE__ExcessiveFeePayout();
+                }
+                if (totalReferrals > contractBalance) {
+                    revert CUBE__ExceedsContractBalance();
+                }
+
+                // Transfer the referral amount to the recipient
+                address recipient = data.recipients[i].recipient;
+                if (recipient != address(0)) {
+                    (bool success,) = recipient.call{value: referralAmount}("");
+                    if (!success) {
+                        revert CUBE__TransferFailed();
+                    }
+
+                    emit FeePayout(recipient, referralAmount);
+                }
+                unchecked {
+                    ++i;
+                }
             }
+        }
+
+        (bool success,) = payable(s_treasury).call{value: data.price - totalReferrals}("");
+        if (!success) {
+            revert CUBE__NativePaymentFailed();
         }
     }
 
@@ -492,6 +527,7 @@ contract CUBE is
             data.questId,
             data.nonce,
             data.price,
+            data.isNative,
             data.toAddress,
             _encodeString(data.walletProvider),
             _encodeString(data.tokenURI),
@@ -590,6 +626,22 @@ contract CUBE is
     function setIsMintingActive(bool _isMintingActive) external onlyRole(DEFAULT_ADMIN_ROLE) {
         s_isMintingActive = _isMintingActive;
         emit MintingSwitch(_isMintingActive);
+    }
+
+    /// @notice Sets a new treasury address
+    /// @dev Can only be called by an account with the default admin role.
+    /// @param _treasury Address of the new treasury to receive fees
+    function setTreasury(address _treasury) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        s_treasury = _treasury;
+        emit UpdatedTreasury(_treasury);
+    }
+
+    /// @notice Sets the address of the L3 token
+    /// @dev Can only be called by an account with the default admin role.
+    /// @param _l3 L3 token address
+    function setL3TokenAddress(address _l3) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        s_l3Token = _l3;
+        emit UpdatedL3Address(_l3);
     }
 
     /// @notice Withdraws the contract's balance to the message sender
