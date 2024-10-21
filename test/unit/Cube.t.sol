@@ -41,6 +41,8 @@ contract CubeTest is Test {
         uint256 indexed questId,
         uint256 indexed tokenId,
         address indexed claimer,
+        bool isNative,
+        uint256 price,
         uint256 issueNumber,
         string walletProvider,
         string embedOrigin
@@ -76,6 +78,7 @@ contract CubeTest is Test {
     MockERC20 public erc20Mock;
     MockERC721 public erc721Mock;
     MockERC1155 public erc1155Mock;
+    MockERC20 public l3Token;
 
     // Test Users
     address public adminAddress;
@@ -155,12 +158,13 @@ contract CubeTest is Test {
 
         vm.stopPrank();
 
-        // contract warm up
-        //_mintCube();
+        vm.startPrank(ownerPubKey);
+        l3Token = new MockERC20();
+        cubeContract.setTreasury(TREASURY);
+        cubeContract.setL3TokenAddress(address(l3Token));
 
-        // withdraw in order for contract to start at 0 balance
-        vm.prank(ownerPubKey);
         cubeContract.withdraw();
+        vm.stopPrank();
     }
 
     function _mintCube() internal {
@@ -183,36 +187,46 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        // CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-        // bytes[] memory signatures = new bytes[](1);
-        // cubeData[0] = _data;
-        // signatures[0] = signature;
-
         hoax(adminAddress, 10 ether);
         cubeContract.mintCube{value: 10 ether}(_data, signature);
     }
 
     function testPayWithL3() public {
-        MockERC20 l3Token = new MockERC20();
-        vm.startPrank(ownerPubKey);
-        cubeContract.setTreasury(TREASURY);
-        cubeContract.setL3TokenAddress(address(l3Token));
-        vm.stopPrank();
-
         l3Token.mint(BOB, 1000);
-
-        console.log("Treasury: ", cubeContract.s_treasury());
-        console.log("L3 Token Address: ", cubeContract.s_l3Token());
-
-        console.log("Bob's balance: ", l3Token.balanceOf(BOB));
-        console.log("Treasury's balance: ", l3Token.balanceOf(TREASURY));
-        console.log("ALICE's balance: ", l3Token.balanceOf(ALICE));
 
         // let bob give some allowance to the contract
         vm.prank(BOB);
         l3Token.approve(address(cubeContract), 600);
 
-        console.log("allowance: ", l3Token.allowance(BOB, address(cubeContract)));
+        // test a mint and pay with erc20
+        CUBE.CubeData memory _data = helper.getCubeData({
+            _feeRecipient: ALICE,
+            _mintTo: BOB,
+            factoryAddress: address(factoryContract), // TODO: figure out why escrows break with L3 payments
+            tokenAddress: address(erc20Mock),
+            tokenId: 0,
+            tokenType: ITokenType.TokenType.ERC20,
+            rakeBps: 0,
+            amount: 20,
+            chainId: 137
+        });
+        _data.nonce = 0;
+        _data.isNative = false;
+
+        bytes32 structHash = helper.getStructHash(_data);
+        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+        vm.prank(BOB);
+        cubeContract.mintCube(_data, signature);
+    }
+
+    function testPayWithL3LowAllowance() public {
+        l3Token.mint(BOB, 1000);
+
+        vm.prank(BOB);
+        l3Token.approve(address(cubeContract), 300); // approve less than the price of 600
 
         // test a mint and pay with erc20
         CUBE.CubeData memory _data = helper.getCubeData({
@@ -237,15 +251,41 @@ contract CubeTest is Test {
 
         // hoax(adminAddress, 10 ether);
         vm.prank(BOB);
+        vm.expectRevert();
         cubeContract.mintCube(_data, signature);
+    }
 
-        console.log("Bob's balance after mint: ", erc20Mock.balanceOf(BOB));
-        console.log("Treasury's balance after mint: ", erc20Mock.balanceOf(TREASURY));
-        console.log("ALICE's balance after mint: ", erc20Mock.balanceOf(ALICE));
+    function testPayWithL3LowBalance() public {
+        l3Token.mint(BOB, 200);
 
-        console.log("Bob's L3 balance after mint: ", l3Token.balanceOf(BOB));
-        console.log("Treasury's L3 balance after mint: ", l3Token.balanceOf(TREASURY));
-        console.log("ALICE's L3 balance after mint: ", l3Token.balanceOf(ALICE));
+        vm.prank(BOB);
+        l3Token.approve(address(cubeContract), 600); // approve less than the price of 600
+
+        // test a mint and pay with erc20
+        CUBE.CubeData memory _data = helper.getCubeData({
+            _feeRecipient: ALICE,
+            _mintTo: BOB,
+            factoryAddress: address(factoryContract), // TODO: figure out why escrows break with L3 payments
+            tokenAddress: address(erc20Mock),
+            tokenId: 0,
+            tokenType: ITokenType.TokenType.ERC20,
+            rakeBps: 0,
+            amount: 20,
+            chainId: 137
+        });
+        _data.nonce = 0;
+        _data.isNative = false;
+
+        bytes32 structHash = helper.getStructHash(_data);
+        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        // hoax(adminAddress, 10 ether);
+        vm.prank(BOB);
+        vm.expectRevert();
+        cubeContract.mintCube(_data, signature);
     }
 
     function fundEscrowContract() internal {
@@ -329,77 +369,78 @@ contract CubeTest is Test {
         cubeContract.initializeQuest(questId, communities, title, difficulty, questType, tags);
     }
 
-    // function testMintCubeNativeReward() public {
-    //     uint256 rake = 300;
-    //     (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getCustomSignedCubeMintData(
-    //         address(0), 0, 2 ether, ITokenType.TokenType.NATIVE, rake, 137
-    //     );
+    function testMintCubeNativeReward() public {
+        uint256 rake = 300;
+        (CUBE.CubeData memory cubeData, bytes memory signature) = _getCustomSignedCubeMintData(
+            address(0), 0, 2 ether, ITokenType.TokenType.NATIVE, rake, 137
+        );
 
-    //     hoax(adminAddress, 10 ether);
-    //     cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
-    // }
+        hoax(adminAddress, 10 ether);
 
-    // function testMintCubeNoReward() public {
-    //     uint256 rake = 300;
-    //     uint256 amount = 100;
-    //     (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getCustomSignedCubeMintData(
-    //         address(erc20Mock), 0, amount, ITokenType.TokenType.ERC20, rake, 0
-    //     );
+        cubeContract.mintCube{value: 600}(cubeData, signature);
+    }
 
-    //     hoax(adminAddress, 10 ether);
-    //     cubeContract.mintCubes{value: 1 ether}(cubeData, signatures);
+    function testMintCubeNoReward() public {
+        uint256 rake = 300;
+        uint256 amount = 100;
+        (CUBE.CubeData memory cubeData, bytes memory signature) = _getCustomSignedCubeMintData(
+            address(erc20Mock), 0, amount, ITokenType.TokenType.ERC20, rake, 0
+        );
 
-    //     uint256 bobBal = erc20Mock.balanceOf(BOB);
-    //     assert(bobBal == 0);
-    //     assert(erc20Mock.balanceOf(TREASURY) == 0);
-    // }
+        hoax(adminAddress, 10 ether);
+        cubeContract.mintCube{value: 1 ether}(cubeData, signature);
 
-    // function testMintCubeERC20Reward() public {
-    //     uint256 rake = 300; // 3%
-    //     uint256 amount = 100;
-    //     (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getCustomSignedCubeMintData(
-    //         address(erc20Mock), 0, amount, ITokenType.TokenType.ERC20, rake, 137
-    //     );
+        uint256 bobBal = erc20Mock.balanceOf(BOB);
+        assert(bobBal == 0);
+        assert(erc20Mock.balanceOf(TREASURY) == 0);
+    }
 
-    //     hoax(adminAddress, 10 ether);
-    //     cubeContract.mintCubes{value: 1 ether}(cubeData, signatures);
+    function testMintCubeERC20Reward() public {
+        uint256 rake = 300; // 3%
+        uint256 amount = 100;
+        (CUBE.CubeData memory cubeData, bytes memory signature) = _getCustomSignedCubeMintData(
+            address(erc20Mock), 0, amount, ITokenType.TokenType.ERC20, rake, 137
+        );
 
-    //     uint256 bobBal = erc20Mock.balanceOf(BOB);
-    //     uint256 rakePayout = (amount * rake) / 10_000;
-    //     assert(bobBal == amount - rakePayout);
-    //     assert(erc20Mock.balanceOf(TREASURY) == rakePayout);
-    // }
+        hoax(adminAddress, 10 ether);
+        cubeContract.mintCube{value: 1 ether}(cubeData, signature);
 
-    // function testMintCubeERC721Reward() public {
-    //     (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getCustomSignedCubeMintData(
-    //         address(erc721Mock), 2, 1, ITokenType.TokenType.ERC721, 1, 137
-    //     );
+        uint256 bobBal = erc20Mock.balanceOf(BOB);
+        uint256 rakePayout = (amount * rake) / 10_000;
+        assert(bobBal == amount - rakePayout);
+        assert(erc20Mock.balanceOf(TREASURY) == rakePayout);
+    }
 
-    //     hoax(adminAddress, 10 ether);
-    //     cubeContract.mintCubes{value: 1 ether}(cubeData, signatures);
+    function testMintCubeERC721Reward() public {
+        (CUBE.CubeData memory cubeData, bytes memory signature) = _getCustomSignedCubeMintData(
+            address(erc721Mock), 2, 1, ITokenType.TokenType.ERC721, 1, 137
+        );
 
-    //     address ownerOf = erc721Mock.ownerOf(2);
-    //     assertEq(ownerOf, BOB);
-    // }
+        hoax(adminAddress, 10 ether);
+        cubeContract.mintCube{value: 1 ether}(cubeData, signature);
 
-    // function testMintCubeERC1155Reward() public {
-    //     (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getCustomSignedCubeMintData(
-    //         address(erc1155Mock), 0, 2, ITokenType.TokenType.ERC1155, 0, 137
-    //     );
+        address ownerOf = erc721Mock.ownerOf(2);
+        assertEq(ownerOf, BOB);
+    }
 
-    //     bool isSigner = cubeContract.hasRole(keccak256("SIGNER"), adminAddress);
-    //     assertEq(isSigner, true);
+    function testMintCubeERC1155Reward() public {
+        (CUBE.CubeData memory cubeData, bytes memory signature) = _getCustomSignedCubeMintData(
+            address(erc1155Mock), 0, 2, ITokenType.TokenType.ERC1155, 0, 137
+        );
 
-    //     hoax(adminAddress, 10 ether);
+        bool isSigner = cubeContract.hasRole(keccak256("SIGNER"), adminAddress);
+        assertEq(isSigner, true);
 
-    //     cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
+        hoax(adminAddress, 10 ether);
 
-    //     assertEq(cubeContract.tokenURI(1), "ipfs://abc");
-    //     assertEq(cubeContract.ownerOf(1), BOB);
+        cubeContract.mintCube{value: 10 ether}(cubeData, signature);
 
-    //     uint256 bobBal = erc1155Mock.balanceOf(address(BOB), 0);
-    //     assertEq(bobBal, 2);
-    // }
+        assertEq(cubeContract.tokenURI(0), "ipfs://abc");
+        assertEq(cubeContract.ownerOf(0), BOB);
+
+        uint256 bobBal = erc1155Mock.balanceOf(address(BOB), 0);
+        assertEq(bobBal, 2);
+    }
 
     function testDepositNativeToEscrow() public {
         uint256 preBalance = address(mockEscrow).balance;
@@ -449,207 +490,109 @@ contract CubeTest is Test {
         assertEq(erc721Mock.ownerOf(2), address(mockEscrow));
     }
 
-    // function testMintCubes() public {
-    //     (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getSignedCubeMintData();
+    function testMintCube() public {
+        (CUBE.CubeData memory cubeData, bytes memory signature) = _getSignedCubeMintData();
 
-    //     bool isSigner = cubeContract.hasRole(keccak256("SIGNER"), adminAddress);
-    //     assertEq(isSigner, true);
+        bool isSigner = cubeContract.hasRole(keccak256("SIGNER"), adminAddress);
+        assertEq(isSigner, true);
 
-    //     hoax(adminAddress, 10 ether);
+        hoax(adminAddress, 10 ether);
 
-    //     cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCube{value: 10 ether}(cubeData, signature);
 
-    //     assertEq(cubeContract.tokenURI(1), "ipfs://abc");
-    //     assertEq(cubeContract.ownerOf(1), BOB);
-    // }
+        assertEq(cubeContract.tokenURI(0), "ipfs://abc");
+        assertEq(cubeContract.ownerOf(0), BOB);
+    }
 
-    // function testMintCubesRewardEvent() public {
-    //     (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getSignedCubeMintData();
+    function testMintCubesRewardEvent() public {
+        (CUBE.CubeData memory cubeData, bytes memory signature) = _getSignedCubeMintData();
 
-    //     hoax(adminAddress, 10 ether);
+        hoax(adminAddress, 10 ether);
 
-    //     // Expecting TokenReward event to be emitted
-    //     vm.expectEmit(true, true, true, true);
-    //     emit TokenReward(1, address(erc20Mock), 137, 100, 0, ITokenType.TokenType.ERC20);
+        // Expecting TokenReward event to be emitted
+        vm.expectEmit(true, true, true, true);
+        emit TokenReward(0, address(erc20Mock), 137, 100, 0, ITokenType.TokenType.ERC20);
 
-    //     cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
-    // }
+        cubeContract.mintCube{value: 10 ether}(cubeData, signature);
+    }
 
-    // function testMintCubesTxEvent() public {
-    //     (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getSignedCubeMintData();
+    function testMintCubesTxEvent() public {
+        (CUBE.CubeData memory cubeData, bytes memory signature) = _getSignedCubeMintData();
 
-    //     hoax(adminAddress, 10 ether);
+        hoax(adminAddress, 10 ether);
 
-    //     // Expecting CubeTransaction event to be emitted
-    //     vm.expectEmit(true, true, true, true);
-    //     emit CubeTransaction(
-    //         1, "0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002", "evm:137"
-    //     );
+        // Expecting CubeTransaction event to be emitted
+        vm.expectEmit(true, true, true, true);
+        emit CubeTransaction(
+            0, "0xe265a54b4f6470f7f52bb1e4b19489b13d4a6d0c87e6e39c5d05c6639ec98002", "evm:137"
+        );
 
-    //     cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
-    // }
+        cubeContract.mintCube{value: 10 ether}(cubeData, signature);
+    }
 
-    // function testMintCubesClaimEvent() public {
-    //     (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getSignedCubeMintData();
+    function testMintCubesClaimEvent() public {
+        (CUBE.CubeData memory cubeData, bytes memory signature) = _getSignedCubeMintData();
 
-    //     hoax(adminAddress, 10 ether);
+        hoax(adminAddress, 10 ether);
 
-    //     // Expecting TokenReward events to be emitted
-    //     vm.expectEmit(true, true, true, true);
-    //     emit CubeClaim(1, 1, BOB, 2, "MetaMask", "test.com");
+        // Expecting TokenReward events to be emitted
+        vm.expectEmit(true, true, true, true);
+        emit CubeClaim(1, 0, BOB, cubeData.isNative, cubeData.price, 1, "MetaMask", "test.com");
 
-    //     cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
-    // }
+        cubeContract.mintCube{value: 10 ether}(cubeData, signature);
+    }
 
-    // function testNonceReuse() public {
-    //     CUBE.CubeData memory data = helper.getCubeData(
-    //         ALICE,
-    //         BOB,
-    //         address(factoryContract),
-    //         address(erc20Mock),
-    //         0,
-    //         100,
-    //         ITokenType.TokenType.ERC20,
-    //         0,
-    //         137
-    //     );
-    //     CUBE.CubeData memory data2 = helper.getCubeData(
-    //         ALICE,
-    //         BOB,
-    //         address(factoryContract),
-    //         address(erc20Mock),
-    //         0,
-    //         100,
-    //         ITokenType.TokenType.ERC20,
-    //         0,
-    //         137
-    //     );
-    //     data.nonce = 1;
-    //     data2.nonce = 1;
+    function testNonceReuse() public {
+        CUBE.CubeData memory data = helper.getCubeData(
+            ALICE,
+            BOB,
+            address(factoryContract),
+            address(erc20Mock),
+            0,
+            100,
+            ITokenType.TokenType.ERC20,
+            0,
+            137
+        );
+        CUBE.CubeData memory data2 = helper.getCubeData(
+            ALICE,
+            BOB,
+            address(factoryContract),
+            address(erc20Mock),
+            0,
+            100,
+            ITokenType.TokenType.ERC20,
+            0,
+            137
+        );
+        data.nonce = 1;
+        data2.nonce = 1;
 
-    //     bytes32 structHash = helper.getStructHash(data);
-    //     bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
-    //     (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
-    //     bytes memory signature = abi.encodePacked(r, s, v);
+        bytes32 structHash = helper.getStructHash(data);
+        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
 
-    //     bytes32 structHash2 = helper.getStructHash(data2);
-    //     bytes32 digest2 = helper.getDigest(getDomainSeparator(), structHash2);
-    //     (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(adminPrivateKey, digest2);
-    //     bytes memory signature2 = abi.encodePacked(r2, s2, v2);
+        bytes32 structHash2 = helper.getStructHash(data2);
+        bytes32 digest2 = helper.getDigest(getDomainSeparator(), structHash2);
+        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(adminPrivateKey, digest2);
+        bytes memory signature2 = abi.encodePacked(r2, s2, v2);
 
-    //     bytes[] memory signatures = new bytes[](2);
-    //     CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](2);
+        bytes[] memory signatures = new bytes[](2);
+        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](2);
 
-    //     signatures[0] = signature;
-    //     signatures[1] = signature2;
-    //     cubeData[0] = data;
-    //     cubeData[1] = data2;
+        signatures[0] = signature;
+        signatures[1] = signature2;
+        cubeData[0] = data;
+        cubeData[1] = data2;
 
-    //     hoax(adminAddress, 20 ether);
-    //     vm.expectRevert(CUBE.CUBE__NonceAlreadyUsed.selector);
-    //     cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
-    // }
+        hoax(adminAddress, 40 ether);
+        cubeContract.mintCube{value: 20 ether}(cubeData[0], signatures[0]);
+        vm.expectRevert(CUBE.CUBE__NonceAlreadyUsed.selector);
+        cubeContract.mintCube{value: 20 ether}(cubeData[1], signatures[1]);
+    }
 
-    // function testCubeMintDifferentSigners() public {
-    //     CUBE.CubeData memory data = helper.getCubeData(
-    //         ALICE,
-    //         BOB,
-    //         address(factoryContract),
-    //         address(erc20Mock),
-    //         0,
-    //         100,
-    //         ITokenType.TokenType.ERC20,
-    //         0,
-    //         137
-    //     );
-    //     CUBE.CubeData memory data2 = helper.getCubeData(
-    //         ALICE,
-    //         BOB,
-    //         address(factoryContract),
-    //         address(erc20Mock),
-    //         0,
-    //         100,
-    //         ITokenType.TokenType.ERC20,
-    //         0,
-    //         137
-    //     );
-
-    //     data.nonce = 1;
-    //     data2.nonce = 2;
-
-    //     bytes32 structHash = helper.getStructHash(data);
-    //     bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
-    //     (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
-    //     bytes memory signature = abi.encodePacked(r, s, v);
-
-    //     bytes32 structHash2 = helper.getStructHash(data2);
-    //     bytes32 digest2 = helper.getDigest(getDomainSeparator(), structHash2);
-    //     (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(notAdminPrivKey, digest2);
-    //     bytes memory signature2 = abi.encodePacked(r2, s2, v2);
-
-    //     bytes[] memory signatures = new bytes[](2);
-    //     CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](2);
-
-    //     signatures[0] = signature;
-    //     signatures[1] = signature2;
-    //     cubeData[0] = data;
-    //     cubeData[1] = data2;
-
-    //     hoax(adminAddress, 20 ether);
-    //     vm.expectRevert(CUBE.CUBE__IsNotSigner.selector);
-    //     cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
-    // }
-
-    // function testMultipleCubeDataMint() public {
-    //     CUBE.CubeData memory data = helper.getCubeData(
-    //         ALICE,
-    //         BOB,
-    //         address(factoryContract),
-    //         address(erc20Mock),
-    //         0,
-    //         100,
-    //         ITokenType.TokenType.ERC20,
-    //         0,
-    //         137
-    //     );
-    //     CUBE.CubeData memory data2 = helper.getCubeData(
-    //         ALICE,
-    //         BOB,
-    //         address(factoryContract),
-    //         address(erc20Mock),
-    //         0,
-    //         100,
-    //         ITokenType.TokenType.ERC20,
-    //         0,
-    //         137
-    //     );
-    //     data2.nonce = 32142;
-
-    //     bytes32 structHash = helper.getStructHash(data);
-    //     bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
-    //     (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
-    //     bytes memory signature = abi.encodePacked(r, s, v);
-
-    //     bytes32 structHash2 = helper.getStructHash(data2);
-    //     bytes32 digest2 = helper.getDigest(getDomainSeparator(), structHash2);
-    //     (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(adminPrivateKey, digest2);
-    //     bytes memory signature2 = abi.encodePacked(r2, s2, v2);
-
-    //     bytes[] memory signatures = new bytes[](2);
-    //     CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](2);
-
-    //     signatures[0] = signature;
-    //     signatures[1] = signature2;
-    //     cubeData[0] = data;
-    //     cubeData[1] = data2;
-
-    //     hoax(adminAddress, 20 ether);
-    //     cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
-    //     assertEq(cubeContract.ownerOf(1), BOB);
-    // }
-
-    /*
-    function testMismatchCubeDataAndSignatureArray() public {
+    function testCubeMintDifferentSigners() public {
         CUBE.CubeData memory data = helper.getCubeData(
             ALICE,
             BOB,
@@ -673,21 +616,80 @@ contract CubeTest is Test {
             137
         );
 
+        data.nonce = 1;
+        data2.nonce = 2;
+
         bytes32 structHash = helper.getStructHash(data);
         bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes[] memory signatures = new bytes[](1);
+        bytes32 structHash2 = helper.getStructHash(data2);
+        bytes32 digest2 = helper.getDigest(getDomainSeparator(), structHash2);
+        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(notAdminPrivKey, digest2);
+        bytes memory signature2 = abi.encodePacked(r2, s2, v2);
+
+        bytes[] memory signatures = new bytes[](2);
         CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](2);
 
         signatures[0] = signature;
+        signatures[1] = signature2;
         cubeData[0] = data;
         cubeData[1] = data2;
 
         hoax(adminAddress, 20 ether);
-        vm.expectRevert(CUBE.CUBE__SignatureAndCubesInputMismatch.selector);
-        cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
+        cubeContract.mintCube{value: 20 ether}(cubeData[0], signatures[0]);
+        vm.expectRevert(CUBE.CUBE__IsNotSigner.selector);
+        cubeContract.mintCube{value: 20 ether}(cubeData[1], signatures[1]);
+    }
+
+    function testMultipleCubeDataMint() public {
+        CUBE.CubeData memory data = helper.getCubeData(
+            ALICE,
+            BOB,
+            address(factoryContract),
+            address(erc20Mock),
+            0,
+            100,
+            ITokenType.TokenType.ERC20,
+            0,
+            137
+        );
+        CUBE.CubeData memory data2 = helper.getCubeData(
+            ALICE,
+            BOB,
+            address(factoryContract),
+            address(erc20Mock),
+            0,
+            100,
+            ITokenType.TokenType.ERC20,
+            0,
+            137
+        );
+        data2.nonce = 32142;
+
+        bytes32 structHash = helper.getStructHash(data);
+        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        bytes32 structHash2 = helper.getStructHash(data2);
+        bytes32 digest2 = helper.getDigest(getDomainSeparator(), structHash2);
+        (uint8 v2, bytes32 r2, bytes32 s2) = vm.sign(adminPrivateKey, digest2);
+        bytes memory signature2 = abi.encodePacked(r2, s2, v2);
+
+        bytes[] memory signatures = new bytes[](2);
+        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](2);
+
+        signatures[0] = signature;
+        signatures[1] = signature2;
+        cubeData[0] = data;
+        cubeData[1] = data2;
+
+        hoax(adminAddress, 20 ether);
+        cubeContract.mintCube{value: 10 ether}(cubeData[0], signatures[0]);
+        cubeContract.mintCube{value: 10 ether}(cubeData[1], signatures[1]);
+        assertEq(cubeContract.ownerOf(1), BOB);
     }
 
     function testEmptySignatureArray() public {
@@ -702,34 +704,10 @@ contract CubeTest is Test {
             0,
             137
         );
-        CUBE.CubeData memory data2 = helper.getCubeData(
-            ALICE,
-            BOB,
-            address(factoryContract),
-            address(erc20Mock),
-            0,
-            100,
-            ITokenType.TokenType.ERC20,
-            0,
-            137
-        );
-
-        bytes32 structHash = helper.getStructHash(data);
-        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        bytes[] memory signatures = new bytes[](2);
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](2);
-
-        signatures[0] = signature;
-        cubeData[0] = data;
-        cubeData[1] = data2;
 
         hoax(adminAddress, 20 ether);
-        // expected error: ECDSAInvalidSignatureLength(0)
         vm.expectRevert();
-        cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
+        cubeContract.mintCube{value: 20 ether}(data, new bytes(0));
     }
 
     function testInvalidSignature() public {
@@ -752,16 +730,11 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(notAdminPrivKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-        bytes[] memory signatures = new bytes[](1);
-        cubeData[0] = _data;
-        signatures[0] = signature;
-
         hoax(adminAddress, 10 ether);
 
         // Expect the mint to fail due to invalid signature
         vm.expectRevert(CUBE.CUBE__IsNotSigner.selector);
-        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCube{value: 10 ether}(_data, signature);
     }
 
     function testEmptyCubeDataTxs() public {
@@ -783,14 +756,8 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes[] memory signatures = new bytes[](1);
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-
-        signatures[0] = signature;
-        cubeData[0] = data;
-
         hoax(adminAddress, 10 ether);
-        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCube{value: 10 ether}(data, signature);
     }
 
     function testEmptyReferrals() public {
@@ -812,14 +779,8 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes[] memory signatures = new bytes[](1);
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-
-        signatures[0] = signature;
-        cubeData[0] = data;
-
         hoax(adminAddress, 10 ether);
-        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCube{value: 10 ether}(data, signature);
     }
 
     function testMultipleRefPayouts() public {
@@ -844,16 +805,10 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes[] memory signatures = new bytes[](1);
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-
-        signatures[0] = signature;
-        cubeData[0] = data;
-
-        uint256 amount = 0.01 ether;
+        uint256 amount = 600;
 
         hoax(adminAddress, amount);
-        cubeContract.mintCubes{value: amount}(cubeData, signatures);
+        cubeContract.mintCube{value: amount}(data, signature);
 
         assertEq(ALICE.balance, amount * 500 / 10_000); // 5%
         assertEq(BOB.balance, amount * 4000 / 10_000); // 40%
@@ -882,15 +837,9 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes[] memory signatures = new bytes[](1);
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-
-        signatures[0] = signature;
-        cubeData[0] = data;
-
         hoax(adminAddress, 10 ether);
         vm.expectRevert(CUBE.CUBE__ExcessiveFeePayout.selector);
-        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCube{value: 10 ether}(data, signature);
 
         // alice's balance should be 0 since contract tx reverted
         assertEq(ALICE.balance, 0);
@@ -921,15 +870,9 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes[] memory signatures = new bytes[](1);
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-
-        signatures[0] = signature;
-        cubeData[0] = data;
-
         hoax(adminAddress, 10 ether);
         vm.expectRevert(CUBE.CUBE__BPSTooHigh.selector);
-        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCube{value: 10 ether}(data, signature);
     }
 
     function testTooHighReferralAmount() public {
@@ -954,15 +897,9 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes[] memory signatures = new bytes[](1);
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-
-        signatures[0] = signature;
-        cubeData[0] = data;
-
         hoax(adminAddress, 10 ether);
         vm.expectRevert(CUBE.CUBE__ExcessiveFeePayout.selector);
-        cubeContract.mintCubes{value: 10 ether}(cubeData, signatures);
+        cubeContract.mintCube{value: 10 ether}(data, signature);
         assertEq(ALICE.balance, 0);
     }
 
@@ -984,17 +921,10 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes[] memory signatures = new bytes[](2);
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](2);
-
-        signatures[0] = signature;
-        signatures[1] = signature;
-        cubeData[0] = data;
-        cubeData[1] = data;
-
         hoax(adminAddress, 20 ether);
+        cubeContract.mintCube{value: 20 ether}(data, signature);
         vm.expectRevert(CUBE.CUBE__NonceAlreadyUsed.selector);
-        cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
+        cubeContract.mintCube{value: 20 ether}(data, signature);
     }
 
     function testModifyNonceAfterSignature() public {
@@ -1015,51 +945,48 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        bytes[] memory signatures = new bytes[](2);
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](2);
-
-        signatures[0] = signature;
-        signatures[1] = signature;
-        cubeData[0] = data;
-
         // modify nonce
         CUBE.CubeData memory modData = data;
         modData.nonce = 324234;
-        cubeData[1] = modData;
 
         hoax(adminAddress, 20 ether);
 
         // expect CUBE__IsNotSigner since we changed the data (nonce)
         // and we should not be able to recover the signer address
         vm.expectRevert(CUBE.CUBE__IsNotSigner.selector);
-        cubeContract.mintCubes{value: 20 ether}(cubeData, signatures);
+        cubeContract.mintCube{value: 20 ether}(modData, signature);
     }
 
     function testMultipleReferrers() public {
-        CUBE.CubeData[] memory _data = _getCubeMintData();
+        CUBE.CubeData memory _data = helper.getCubeData({
+            _feeRecipient: ALICE,
+            _mintTo: BOB,
+            factoryAddress: address(factoryContract),
+            tokenAddress: address(erc20Mock),
+            tokenId: 0,
+            tokenType: ITokenType.TokenType.ERC20,
+            rakeBps: 0,
+            chainId: 137,
+            amount: 100
+        });
 
-        uint256 preOwnerBalance = ownerPubKey.balance;
+        uint256 preOwnerBalance = TREASURY.balance;
 
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-        bytes[] memory signatures = new bytes[](1);
+        _data.recipients = new CUBE.FeeRecipient[](3);
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500});
+        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 800});
+        _data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 1000});
 
-        _data[0].recipients = new CUBE.FeeRecipient[](3);
-        _data[0].recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500});
-        _data[0].recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 800});
-        _data[0].recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 1000});
-
-        bytes32 structHash = helper.getStructHash(_data[0]);
+        bytes32 structHash = helper.getStructHash(_data);
         bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
 
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
-        cubeData[0] = _data[0];
-        signatures[0] = signature;
 
-        uint256 amount = 0.01 ether;
+        uint256 amount = 600;
 
         hoax(adminAddress, amount);
-        cubeContract.mintCubes{value: amount}(cubeData, signatures);
+        cubeContract.mintCube{value: amount}(_data, signature);
 
         uint256 expectedBalAlice = amount * 500 / 10_000;
         assertEq(ALICE.balance, expectedBalAlice);
@@ -1069,34 +996,29 @@ contract CubeTest is Test {
         assertEq(adminAddress.balance, expectedBalAdmin);
         // 23% taken by referrers, so 77% should be left
         uint256 expectedMintProfit = amount * 7700 / 10_000;
-        assertEq(proxyAddress.balance, expectedMintProfit);
+        assertEq(TREASURY.balance, expectedMintProfit);
 
-        vm.prank(ownerPubKey);
-        cubeContract.withdraw();
-
-        assertEq(ownerPubKey.balance - preOwnerBalance, expectedMintProfit);
-        assertEq(proxyAddress.balance, 0);
+        assertEq(TREASURY.balance - preOwnerBalance, expectedMintProfit);
     }
 
     function testReferralFees() public {
-        uint256 preContractBalance = proxyAddress.balance;
-        (CUBE.CubeData[] memory cubeData, bytes[] memory signatures) = _getSignedCubeMintData();
+        uint256 preTreasuryBalance = TREASURY.balance;
+        (CUBE.CubeData memory cubeData, bytes memory signatures) = _getSignedCubeMintData();
 
-        uint256 amount = 0.01 ether;
+        uint256 amount = 600;
 
         // send from admin
         hoax(adminAddress, amount);
-        cubeContract.mintCubes{value: amount}(cubeData, signatures);
+        cubeContract.mintCube{value: amount}(cubeData, signatures);
 
         uint256 balanceAlice = ALICE.balance;
-        uint256 balanceContract = proxyAddress.balance;
+        uint256 balanceTreasury = TREASURY.balance;
 
-        uint256 expectedBal = preContractBalance + (amount * 3300 / 10_000);
+        uint256 expectedBal = amount * 3300 / 10_000;
 
         assertEq(balanceAlice, expectedBal);
-        assertEq(balanceContract, (amount - expectedBal) + preContractBalance);
+        assertEq(balanceTreasury, (amount - expectedBal) + preTreasuryBalance);
     }
-    */
 
     function testUnpublishQuest(uint256 questId) public {
         vm.startPrank(adminAddress);
@@ -1222,7 +1144,7 @@ contract CubeTest is Test {
         assertEq(isActive3, false);
     }
 
-    function testInitializedNFT() public {
+    function testInitializedNFT() public view {
         string memory name = cubeContract.name();
         string memory symbol = cubeContract.symbol();
 
@@ -1251,24 +1173,6 @@ contract CubeTest is Test {
         _;
     }
 
-    function _getCubeMintData() internal view returns (CUBE.CubeData[] memory) {
-        CUBE.CubeData memory _data = helper.getCubeData({
-            _feeRecipient: ALICE,
-            _mintTo: BOB,
-            factoryAddress: address(factoryContract),
-            tokenAddress: address(erc20Mock),
-            tokenId: 0,
-            tokenType: ITokenType.TokenType.ERC20,
-            rakeBps: 0,
-            chainId: 137,
-            amount: 100
-        });
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-        cubeData[0] = _data;
-
-        return cubeData;
-    }
-
     struct Message {
         bytes data;
         uint256 nonce;
@@ -1281,7 +1185,7 @@ contract CubeTest is Test {
         ITokenType.TokenType tokenType,
         uint256 rakeBps,
         uint256 chainId
-    ) internal view returns (CUBE.CubeData[] memory, bytes[] memory) {
+    ) internal view returns (CUBE.CubeData memory, bytes memory) {
         CUBE.CubeData memory _data = helper.getCubeData({
             _feeRecipient: ALICE,
             _mintTo: BOB,
@@ -1300,19 +1204,10 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-        bytes[] memory signatures = new bytes[](1);
-        cubeData[0] = _data;
-        signatures[0] = signature;
-
-        return (cubeData, signatures);
+        return (_data, signature);
     }
 
-    function _getSignedCubeMintData()
-        internal
-        view
-        returns (CUBE.CubeData[] memory, bytes[] memory)
-    {
+    function _getSignedCubeMintData() internal view returns (CUBE.CubeData memory, bytes memory) {
         CUBE.CubeData memory _data = helper.getCubeData({
             _feeRecipient: ALICE,
             _mintTo: BOB,
@@ -1331,12 +1226,7 @@ contract CubeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        CUBE.CubeData[] memory cubeData = new CUBE.CubeData[](1);
-        bytes[] memory signatures = new bytes[](1);
-        cubeData[0] = _data;
-        signatures[0] = signature;
-
-        return (cubeData, signatures);
+        return (_data, signature);
     }
 
     function testReferralPayouts() public {
@@ -1374,7 +1264,7 @@ contract CubeTest is Test {
         cubeContract.withdraw();
     }
 
-    function testEmptyTokenURI() public {
+    function testEmptyTokenURI() public view {
         // get tokenURI for some random non-existing token
         string memory uri = cubeContract.tokenURI(15);
         assertEq(uri, "");
@@ -1386,20 +1276,20 @@ contract CubeTest is Test {
         cubeContract.initialize("Test", "TEST", "Test", "2", ALICE);
     }
 
-    // function testMintWithLowFee() public {
-    //     (CUBE.CubeData[] memory _data, bytes[] memory _sigs) = _getSignedCubeMintData();
-    //     vm.expectRevert(CUBE.CUBE__FeeNotEnough.selector);
-    //     cubeContract.mintCubes{value: 0.0001 ether}(_data, _sigs);
-    // }
+    function testMintWithLowFee() public {
+        (CUBE.CubeData memory _data, bytes memory _sig) = _getSignedCubeMintData();
+        vm.expectRevert(CUBE.CUBE__FeeNotEnough.selector);
+        cubeContract.mintCube{value: 10}(_data, _sig);
+    }
 
-    function testCubeVersion() public {
+    function testCubeVersion() public view {
         string memory v = cubeContract.cubeVersion();
         assertEq(v, "3");
     }
 
-    // function testMintWithNoFee() public {
-    //     (CUBE.CubeData[] memory _data, bytes[] memory _sigs) = _getSignedCubeMintData();
-    //     vm.expectRevert(CUBE.CUBE__FeeNotEnough.selector);
-    //     cubeContract.mintCubes(_data, _sigs);
-    // }
+    function testMintWithNoFee() public {
+        (CUBE.CubeData memory _data, bytes memory _sig) = _getSignedCubeMintData();
+        vm.expectRevert(CUBE.CUBE__FeeNotEnough.selector);
+        cubeContract.mintCube(_data, _sig);
+    }
 }

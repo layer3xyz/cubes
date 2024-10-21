@@ -19,7 +19,7 @@ contract UpgradeCube is Script {
         //     deployerKey = vm.envUint("PRIVATE_KEY");
         // }
 
-        address proxyAddr = 0xEc9FC487733FcDA6fC62B5CA6C5109e8dB3d3Ce8;
+        address proxyAddr = 0xad4dCAfE9C020CF694FFaa943Be69eC182CA07DC;
         address admin = 0x225d5BF80f4164eB8F7CE8408dD2Cfb9e35a8C57;
         upgradeCube(admin, proxyAddr);
     }

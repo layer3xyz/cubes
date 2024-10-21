@@ -25,7 +25,6 @@ import {ReentrancyGuardUpgradeable} from
 import {IFactory} from "./escrow/interfaces/IFactory.sol";
 import {ITokenType} from "./escrow/interfaces/ITokenType.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {console} from "forge-std/Test.sol";
 
 /// @title CUBE
 /// @dev Implementation of an NFT smart contract with EIP712 signatures.
@@ -56,6 +55,8 @@ contract CUBE is
     error CUBE__NativePaymentFailed();
     error CUBE__ERC20TransferFailed();
     error CUBE__ExceedsContractAllowance();
+    error CUBE__L3TokenNotSet();
+    error CUBE__TreasuryNotSet();
 
     uint256 internal s_nextTokenId;
     bool public s_isMintingActive;
@@ -115,6 +116,8 @@ contract CUBE is
     /// @param questId The quest ID associated with the CUBE
     /// @param tokenId The token ID of the minted CUBE
     /// @param claimer Address of the CUBE claimer
+    /// @param isNative If the payment was made in native currency
+    /// @param price The price paid for the CUBE
     /// @param issueNumber The issue number of the CUBE
     /// @param walletProvider The name of the wallet provider used for claiming
     /// @param embedOrigin The origin of the embed associated with the CUBE
@@ -122,6 +125,8 @@ contract CUBE is
         uint256 indexed questId,
         uint256 indexed tokenId,
         address indexed claimer,
+        bool isNative,
+        uint256 price,
         uint256 issueNumber,
         string walletProvider,
         string embedOrigin
@@ -153,7 +158,8 @@ contract CUBE is
     /// @notice Emitted when a fee payout is made
     /// @param recipient The address of the payout recipient
     /// @param amount The amount of the payout
-    event FeePayout(address indexed recipient, uint256 amount);
+    /// @param isNative If the payout was made in native currency
+    event FeePayout(address indexed recipient, uint256 amount, bool isNative);
 
     /// @notice Emitted when the minting switch is turned on/off
     /// @param isActive The boolean showing if the minting is active or not
@@ -163,8 +169,16 @@ contract CUBE is
     /// @param amount The contract's balance that was withdrawn
     event ContractWithdrawal(uint256 amount);
 
+    /// @notice Emitted when a quest is disabled
+    /// @param questId The ID of the quest that was disabled
     event QuestDisabled(uint256 indexed questId);
+
+    /// @notice Emitted when the treasury address is updated
+    /// @param newTreasury The new treasury address
     event UpdatedTreasury(address indexed newTreasury);
+
+    /// @notice Emitted when the L3 token address is updated
+    /// @param token The L3 token address
     event UpdatedL3Address(address indexed token);
 
     /// @dev Represents the data needed for minting a CUBE.
@@ -299,10 +313,18 @@ contract CUBE is
         }
 
         if (cubeData.isNative) {
-            // Check if the sent value is at least equal to the calculated total fee
+            // Check if the sent value is at least equal to the price
             if (msg.value < cubeData.price) {
                 revert CUBE__FeeNotEnough();
             }
+        }
+
+        if (s_l3Token == address(0)) {
+            revert CUBE__L3TokenNotSet();
+        }
+
+        if (s_treasury == address(0)) {
+            revert CUBE__TreasuryNotSet();
         }
 
         _mintCube(cubeData, signature);
@@ -338,7 +360,7 @@ contract CUBE is
             ++s_nextTokenId;
         }
 
-        // mint fee
+        // process payments
         data.isNative ? _processNativePayouts(data) : _processL3Payouts(data);
 
         // Perform the actual minting of the CUBE
@@ -349,6 +371,8 @@ contract CUBE is
             data.questId,
             tokenId,
             data.toAddress,
+            data.isNative,
+            data.price,
             s_questIssueNumbers[data.questId],
             data.walletProvider,
             data.embedOrigin
@@ -424,12 +448,17 @@ contract CUBE is
                 // Transfer the referral amount to the recipient
                 address recipient = data.recipients[i].recipient;
                 if (recipient != address(0)) {
-                    (bool success, bytes memory returnData) = s_l3Token.call(
+                    (bool payoutSuccess, bytes memory payoutData) = s_l3Token.call(
                         abi.encodeWithSelector(
                             TRANSFER_ERC20, msg.sender, recipient, referralAmount
                         )
                     );
-                    emit FeePayout(recipient, referralAmount);
+                    if (
+                        !payoutSuccess || (payoutData.length > 0 && !abi.decode(payoutData, (bool)))
+                    ) {
+                        revert CUBE__ERC20TransferFailed();
+                    }
+                    emit FeePayout(recipient, referralAmount, data.isNative);
                 }
                 unchecked {
                     ++i;
@@ -450,6 +479,9 @@ contract CUBE is
     /// @dev Distributes a portion of the minting fee to designated addresses based on their Basis Points (BPS)
     /// @param data The CubeData struct containing payout details
     function _processNativePayouts(CubeData calldata data) internal {
+        // if (data.price != msg.value) {
+        //     revert CUBE__FeeNotEnough();
+        // }
         uint256 totalReferrals;
 
         if (data.recipients.length > 0) {
@@ -476,12 +508,12 @@ contract CUBE is
                 // Transfer the referral amount to the recipient
                 address recipient = data.recipients[i].recipient;
                 if (recipient != address(0)) {
-                    (bool success,) = recipient.call{value: referralAmount}("");
-                    if (!success) {
+                    (bool payoutSuccess,) = recipient.call{value: referralAmount}("");
+                    if (!payoutSuccess) {
                         revert CUBE__TransferFailed();
                     }
 
-                    emit FeePayout(recipient, referralAmount);
+                    emit FeePayout(recipient, referralAmount, data.isNative);
                 }
                 unchecked {
                     ++i;
