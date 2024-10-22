@@ -13,14 +13,15 @@ contract UpgradeCube is Script {
     uint256 public deployerKey;
 
     function run() public {
-        if (block.chainid == 31337) {
-            deployerKey = DEFAULT_ANVIL_PRIVATE_KEY;
-        } else {
-            deployerKey = vm.envUint("PRIVATE_KEY");
-        }
+        // if (block.chainid == 31337) {
+        //     deployerKey = DEFAULT_ANVIL_PRIVATE_KEY;
+        // } else {
+        //     deployerKey = vm.envUint("PRIVATE_KEY");
+        // }
 
-        address proxyAddr = address(0);
-        upgradeCube(vm.addr(deployerKey), proxyAddr);
+        address proxyAddr = 0xad4dCAfE9C020CF694FFaa943Be69eC182CA07DC;
+        address admin = 0x225d5BF80f4164eB8F7CE8408dD2Cfb9e35a8C57;
+        upgradeCube(admin, proxyAddr);
     }
 
     function upgradeCube(address _admin, address _proxyAddress) public {

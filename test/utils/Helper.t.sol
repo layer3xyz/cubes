@@ -26,6 +26,7 @@ contract Helper is CUBE {
                 data.questId,
                 data.nonce,
                 data.price,
+                data.isNative,
                 data.toAddress,
                 keccak256(bytes(data.walletProvider)),
                 keccak256(bytes(data.tokenURI)),
@@ -81,7 +82,8 @@ contract Helper is CUBE {
         return CUBE.CubeData({
             questId: 1,
             nonce: 1,
-            price: 0.01 ether,
+            price: 600,
+            isNative: true,
             toAddress: _mintTo,
             walletProvider: "MetaMask",
             tokenURI: "ipfs://abc",
@@ -108,6 +110,9 @@ contract Helper is CUBE {
     }
 
     function processPayouts(CubeData calldata _data) public {
-        return _processPayouts(_data);
+        if (_data.isNative) {
+            return _processNativePayouts(_data);
+        }
+        return _processL3Payouts(_data);
     }
 }
