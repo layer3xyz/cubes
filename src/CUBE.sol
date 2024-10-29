@@ -57,6 +57,7 @@ contract CUBE is
     error CUBE__ExceedsContractAllowance();
     error CUBE__L3TokenNotSet();
     error CUBE__TreasuryNotSet();
+    error CUBE__InvalidAdminAddress();
 
     uint256 internal s_nextTokenId;
     bool public s_isMintingActive;
@@ -266,6 +267,7 @@ contract CUBE is
         string memory _signatureVersion,
         address _admin
     ) external initializer {
+        if (_admin == address(0)) revert CUBE__InvalidAdminAddress();
         __ERC721_init(_tokenName, _tokenSymbol);
         __EIP712_init(_signingDomain, _signatureVersion);
         __AccessControl_init();
@@ -467,11 +469,14 @@ contract CUBE is
         }
 
         // Transfer the remaining amount to the treasury
-        (bool success, bytes memory returnData) = s_l3Token.call(
-            abi.encodeWithSelector(TRANSFER_ERC20, msg.sender, s_treasury, data.price - totalAmount)
-        );
-        if (!success || (returnData.length > 0 && !abi.decode(returnData, (bool)))) {
-            revert CUBE__ERC20TransferFailed();
+        uint256 treasuryAmount = data.price - totalAmount;
+        if (treasuryAmount > 0) {
+            (bool success, bytes memory returnData) = s_l3Token.call(
+                abi.encodeWithSelector(TRANSFER_ERC20, msg.sender, s_treasury, treasuryAmount)
+            );
+            if (!success || (returnData.length > 0 && !abi.decode(returnData, (bool)))) {
+                revert CUBE__ERC20TransferFailed();
+            }
         }
     }
 
@@ -679,11 +684,12 @@ contract CUBE is
     /// @notice Withdraws the contract's balance to the message sender
     /// @dev Can only be called by an account with the default admin role.
     function withdraw() external onlyRole(DEFAULT_ADMIN_ROLE) {
-        (bool success,) = msg.sender.call{value: address(this).balance}("");
+        uint256 withdrawAmount = address(this).balance;
+        (bool success,) = msg.sender.call{value: withdrawAmount}("");
         if (!success) {
             revert CUBE__WithdrawFailed();
         }
-        emit ContractWithdrawal(address(this).balance);
+        emit ContractWithdrawal(withdrawAmount);
     }
 
     /// @notice Initializes a new quest with given parameters
