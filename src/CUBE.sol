@@ -484,9 +484,6 @@ contract CUBE is
     /// @dev Distributes a portion of the minting fee to designated addresses based on their Basis Points (BPS)
     /// @param data The CubeData struct containing payout details
     function _processNativePayouts(CubeData calldata data) internal {
-        // if (data.price != msg.value) {
-        //     revert CUBE__FeeNotEnough();
-        // }
         uint256 totalReferrals;
 
         if (data.recipients.length > 0) {
