@@ -18,14 +18,14 @@ ifeq ($(findstring --network goerli,$(ARGS)),--network goerli)
 endif
 
 # Base
-ifeq ($(findstring --network op_sepolia,$(ARGS)),--network op_sepolia)
-	NETWORK_ARGS := --rpc-url https://sepolia.optimism.io --account baseSepolia --broadcast -vvvv
+ifeq ($(findstring --network base_sepolia,$(ARGS)),--network base_sepolia)
+	NETWORK_ARGS := --rpc-url https://sepolia.base.org --account baseSepolia --broadcast -vvvv
 endif
 
 # Base Sepolia
-ifeq ($(findstring --network base_sepolia,$(ARGS)),--network base_sepolia)
-	NETWORK_ARGS := --rpc-url $(BASE_SEPOLIA_RPC_ENDPOINT) --private-key $(PRIVATE_KEY) --broadcast -vvvv
-endif
+# ifeq ($(findstring --network base_sepolia,$(ARGS)),--network base_sepolia)
+# 	NETWORK_ARGS := --rpc-url $(BASE_SEPOLIA_RPC_ENDPOINT) --private-key $(PRIVATE_KEY) --broadcast -vvvv
+# endif
 
 deploy:
 	@forge script script/DeployCube.s.sol:DeployCube $(NETWORK_ARGS)

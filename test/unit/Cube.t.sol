@@ -1292,4 +1292,183 @@ contract CubeTest is Test {
         vm.expectRevert(CUBE.CUBE__FeeNotEnough.selector);
         cubeContract.mintCube(_data, _sig);
     }
+
+    function testPayWithL3ZeroTreasuryAmount() public {
+        l3Token.mint(BOB, 1000);
+        vm.prank(BOB);
+        l3Token.approve(address(cubeContract), 600);
+
+        // Create data where recipients BPS adds up to 10_000 (100%)
+        CUBE.CubeData memory _data = helper.getCubeData({
+            _feeRecipient: ALICE,
+            _mintTo: BOB,
+            factoryAddress: address(factoryContract),
+            tokenAddress: address(erc20Mock),
+            tokenId: 0,
+            tokenType: ITokenType.TokenType.ERC20,
+            rakeBps: 0,
+            amount: 20,
+            chainId: 137
+        });
+        _data.nonce = 0;
+        _data.isNative = false;
+        _data.recipients = new CUBE.FeeRecipient[](2);
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 5000}); // 50%
+        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000}); // 50%
+
+        bytes32 structHash = helper.getStructHash(_data);
+        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.prank(BOB);
+        cubeContract.mintCube(_data, signature);
+    }
+
+    function testPayWithL3ZeroRecipientAmount() public {
+        l3Token.mint(BOB, 1000);
+        vm.prank(BOB);
+        l3Token.approve(address(cubeContract), 600);
+
+        // Create data with a recipient with 0 BPS
+        CUBE.CubeData memory _data = helper.getCubeData({
+            _feeRecipient: ALICE,
+            _mintTo: BOB,
+            factoryAddress: address(factoryContract),
+            tokenAddress: address(erc20Mock),
+            tokenId: 0,
+            tokenType: ITokenType.TokenType.ERC20,
+            rakeBps: 0,
+            amount: 20,
+            chainId: 137
+        });
+        _data.nonce = 0;
+        _data.isNative = false;
+        _data.recipients = new CUBE.FeeRecipient[](2);
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 0}); // 0%
+        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000}); // 50%
+
+        bytes32 structHash = helper.getStructHash(_data);
+        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.prank(BOB);
+        cubeContract.mintCube(_data, signature);
+
+        // Check that ALICE received nothing
+        assertEq(l3Token.balanceOf(ALICE), 0);
+    }
+
+    function testPayWithL3ZeroAddressRecipient() public {
+        l3Token.mint(BOB, 1000);
+        vm.prank(BOB);
+        l3Token.approve(address(cubeContract), 600);
+
+        uint256 initialBobBalance = l3Token.balanceOf(BOB);
+
+        // Create data with address(0) recipient
+        CUBE.CubeData memory _data = helper.getCubeData({
+            _feeRecipient: ALICE,
+            _mintTo: BOB,
+            factoryAddress: address(factoryContract),
+            tokenAddress: address(erc20Mock),
+            tokenId: 0,
+            tokenType: ITokenType.TokenType.ERC20,
+            rakeBps: 0,
+            amount: 20,
+            chainId: 137
+        });
+        _data.nonce = 0;
+        _data.isNative = false;
+        _data.recipients = new CUBE.FeeRecipient[](2);
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: address(0), BPS: 3000}); // 30%
+        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000}); // 50%
+
+        bytes32 structHash = helper.getStructHash(_data);
+        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.prank(BOB);
+        cubeContract.mintCube(_data, signature);
+
+        // Check that BOB received their share (50% of 600 = 300)
+        assertEq(l3Token.balanceOf(BOB), initialBobBalance - 600 + 300); // Subtract initial transfer, add share
+    }
+
+    function testPayWithL3TreasuryBalanceCheck() public {
+        l3Token.mint(BOB, 1000);
+        vm.prank(BOB);
+        l3Token.approve(address(cubeContract), 600);
+
+        uint256 initialTreasuryBalance = l3Token.balanceOf(TREASURY);
+
+        CUBE.CubeData memory _data = helper.getCubeData({
+            _feeRecipient: ALICE,
+            _mintTo: BOB,
+            factoryAddress: address(factoryContract),
+            tokenAddress: address(erc20Mock),
+            tokenId: 0,
+            tokenType: ITokenType.TokenType.ERC20,
+            rakeBps: 0,
+            amount: 20,
+            chainId: 137
+        });
+        _data.nonce = 0;
+        _data.isNative = false;
+        _data.recipients = new CUBE.FeeRecipient[](1);
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 3000}); // 30%
+
+        bytes32 structHash = helper.getStructHash(_data);
+        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.prank(BOB);
+        cubeContract.mintCube(_data, signature);
+
+        // Check that treasury received remaining 70%
+        assertEq(l3Token.balanceOf(TREASURY), initialTreasuryBalance + (7000 * 600 / 10_000));
+    }
+
+    function testPayWithL3ZeroPrice() public {
+        l3Token.mint(BOB, 1000);
+        vm.prank(BOB);
+
+        uint256 initialBobBalance = l3Token.balanceOf(BOB);
+        uint256 initialTreasuryBalance = l3Token.balanceOf(TREASURY);
+
+        CUBE.CubeData memory _data = helper.getCubeData({
+            _feeRecipient: ALICE,
+            _mintTo: BOB,
+            factoryAddress: address(factoryContract),
+            tokenAddress: address(erc20Mock),
+            tokenId: 0,
+            tokenType: ITokenType.TokenType.ERC20,
+            rakeBps: 0,
+            amount: 20,
+            chainId: 137
+        });
+        _data.nonce = 0;
+        _data.isNative = false;
+        _data.price = 0;  // Set price to 0
+        _data.recipients = new CUBE.FeeRecipient[](3);  // Multiple recipients
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 3000});
+        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000});
+        _data.recipients[2] = CUBE.FeeRecipient({recipient: address(this), BPS: 1000});
+
+        bytes32 structHash = helper.getStructHash(_data);
+        bytes32 digest = helper.getDigest(getDomainSeparator(), structHash);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(adminPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        vm.prank(BOB);
+        cubeContract.mintCube(_data, signature);
+
+        // Verify no balances changed
+        assertEq(l3Token.balanceOf(BOB), initialBobBalance);
+        assertEq(l3Token.balanceOf(TREASURY), initialTreasuryBalance);
+        assertEq(l3Token.balanceOf(ALICE), 0);
+    }
 }

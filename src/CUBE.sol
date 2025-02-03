@@ -423,59 +423,79 @@ contract CUBE is
     /// @dev Distributes a portion of the minting fee to designated addresses based on their Basis Points (BPS)
     /// @param data The CubeData struct containing payout details
     function _processL3Payouts(CubeData calldata data) internal {
-        uint256 totalAmount;
+        // validate amounts
+        (uint256[] memory payoutAmounts, uint256 totalAmount) = _calculatePayouts(data);
 
-        // Process referral payouts to recipients
-        if (data.recipients.length > 0) {
-            // max basis points is 10k (100%)
-            uint16 maxBps = 10_000;
-            uint256 allowance = IERC20(s_l3Token).allowance(msg.sender, address(this));
-            for (uint256 i = 0; i < data.recipients.length;) {
-                if (data.recipients[i].BPS > maxBps) {
-                    revert CUBE__BPSTooHigh();
-                }
+        // transfer mint fee from user to contract - using transferFrom()
+        (bool success, bytes memory returnData) = s_l3Token.call(
+            abi.encodeWithSelector(TRANSFER_ERC20, msg.sender, address(this), data.price)
+        );
+        if (!success || (returnData.length > 0 && !abi.decode(returnData, (bool)))) {
+            revert CUBE__ERC20TransferFailed();
+        }
 
-                // Calculate the referral amount for each recipient
-                uint256 referralAmount = (data.price * data.recipients[i].BPS) / maxBps;
-                totalAmount = totalAmount + referralAmount;
+        uint256 recipientsLength = data.recipients.length;
 
-                // Ensure the total payout does not exceed the cube price or contract allowance
-                if (totalAmount > data.price) {
-                    revert CUBE__ExcessiveFeePayout();
-                }
-                if (totalAmount > allowance) {
-                    revert CUBE__ExceedsContractAllowance();
-                }
+        // process payouts to recipients
+        for (uint256 i = 0; i < recipientsLength;) {
+            address recipient = data.recipients[i].recipient;
+            uint256 amount = payoutAmounts[i];
 
-                // Transfer the referral amount to the recipient
-                address recipient = data.recipients[i].recipient;
-                if (recipient != address(0)) {
-                    (bool payoutSuccess, bytes memory payoutData) = s_l3Token.call(
-                        abi.encodeWithSelector(
-                            TRANSFER_ERC20, msg.sender, recipient, referralAmount
-                        )
-                    );
-                    if (
-                        !payoutSuccess || (payoutData.length > 0 && !abi.decode(payoutData, (bool)))
-                    ) {
-                        revert CUBE__ERC20TransferFailed();
-                    }
-                    emit FeePayout(recipient, referralAmount, data.isNative);
+            if (recipient != address(0) && amount > 0) {
+                (success, returnData) = s_l3Token.call(
+                    abi.encodeWithSelector(IERC20.transfer.selector, recipient, amount)
+                );
+                if (!success || (returnData.length > 0 && !abi.decode(returnData, (bool)))) {
+                    revert CUBE__ERC20TransferFailed();
                 }
-                unchecked {
-                    ++i;
-                }
+                emit FeePayout(recipient, amount, data.isNative);
+            }
+
+            unchecked {
+                ++i;
             }
         }
 
-        // Transfer the remaining amount to the treasury
+        // Transfer remaining amount to treasury
         uint256 treasuryAmount = data.price - totalAmount;
         if (treasuryAmount > 0) {
-            (bool success, bytes memory returnData) = s_l3Token.call(
-                abi.encodeWithSelector(TRANSFER_ERC20, msg.sender, s_treasury, treasuryAmount)
+            (success, returnData) = s_l3Token.call(
+                abi.encodeWithSelector(IERC20.transfer.selector, s_treasury, treasuryAmount)
             );
             if (!success || (returnData.length > 0 && !abi.decode(returnData, (bool)))) {
                 revert CUBE__ERC20TransferFailed();
+            }
+        }
+    }
+
+    /// @dev Calculates payout amounts for all recipients
+    /// @param data The CubeData containing recipient information
+    /// @return payoutAmounts Array of amounts to pay each recipient
+    /// @return totalAmount Total amount to be paid to recipients
+    function _calculatePayouts(CubeData calldata data)
+        internal
+        pure
+        returns (uint256[] memory payoutAmounts, uint256 totalAmount)
+    {
+        uint256 recipientsLength = data.recipients.length;
+        uint16 MAX_BPS = 10_000;
+        payoutAmounts = new uint256[](recipientsLength);
+        totalAmount = 0;
+
+        for (uint256 i = 0; i < recipientsLength;) {
+            if (data.recipients[i].BPS > MAX_BPS) {
+                revert CUBE__BPSTooHigh();
+            }
+
+            payoutAmounts[i] = (data.price * data.recipients[i].BPS) / MAX_BPS;
+            totalAmount += payoutAmounts[i];
+
+            if (totalAmount > data.price) {
+                revert CUBE__ExcessiveFeePayout();
+            }
+
+            unchecked {
+                ++i;
             }
         }
     }
