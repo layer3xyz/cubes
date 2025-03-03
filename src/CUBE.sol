@@ -259,7 +259,7 @@ contract CUBE is
     /// @notice Returns the version of the CUBE smart contract
     // Add state variable for l3Payments enabled
     function cubeVersion() external pure returns (string memory) {
-        return "3";
+        return "4";
     }
 
     /// @notice Initializes the CUBE contract with necessary parameters
