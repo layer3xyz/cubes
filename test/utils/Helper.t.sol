@@ -59,7 +59,8 @@ contract Helper is CUBE {
         uint256 amount,
         CUBE.TokenType tokenType,
         uint256 rakeBps,
-        uint256 chainId
+        uint256 chainId,
+        address rewardRecipient
     ) public pure returns (CUBE.CubeData memory) {
         CUBE.TransactionData[] memory transactions = new CUBE.TransactionData[](1);
         transactions[0] = CUBE.TransactionData({
@@ -74,7 +75,8 @@ contract Helper is CUBE {
             tokenId: tokenId,
             tokenType: tokenType,
             rakeBps: rakeBps,
-            factoryAddress: factoryAddress
+            factoryAddress: factoryAddress,
+            rewardRecipient: rewardRecipient
         });
 
         CUBE.FeeRecipient[] memory recipients = new CUBE.FeeRecipient[](1);

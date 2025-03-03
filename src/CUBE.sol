@@ -67,13 +67,14 @@ contract CUBE is
 
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(string txHash,string networkChainId)");
+    // TODO: add recipient type
     bytes32 internal constant RECIPIENT_DATA_HASH =
         keccak256("FeeRecipient(address recipient,uint16 BPS)");
     bytes32 internal constant REWARD_DATA_HASH = keccak256(
-        "RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress)"
+        "RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress,address rewardRecipient)"
     );
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 nonce,uint256 price,bool isNative,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress)TransactionData(string txHash,string networkChainId)"
+        "CubeData(uint256 questId,uint256 nonce,uint256 price,bool isNative,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress,address rewardRecipient)TransactionData(string txHash,string networkChainId)"
     );
 
     mapping(uint256 => uint256) internal s_questIssueNumbers;
@@ -147,19 +148,22 @@ contract CUBE is
     /// @param amount The amount of the reward
     /// @param tokenId Token ID of the reward (only applicable for ERC721 and ERC1155)
     /// @param tokenType The type of reward token
+    /// @param rewardRecipient The address of the reward recipient
     event TokenReward(
         uint256 indexed cubeTokenId,
         address indexed tokenAddress,
         uint256 indexed chainId,
         uint256 amount,
         uint256 tokenId,
-        TokenType tokenType
+        TokenType tokenType,
+        address rewardRecipient
     );
 
     /// @notice Emitted when a fee payout is made
     /// @param recipient The address of the payout recipient
     /// @param amount The amount of the payout
     /// @param isNative If the payout was made in native currency
+    // TODO: add recipient type
     event FeePayout(address indexed recipient, uint256 amount, bool isNative);
 
     /// @notice Emitted when the minting switch is turned on/off
@@ -211,6 +215,8 @@ contract CUBE is
     /// @dev Represents a recipient for fee distribution.
     /// @param recipient The address of the fee recipient
     /// @param BPS The basis points representing the fee percentage for the recipient
+    /// @param recipientType Quest creator, Enum, if 0 = Quest creator, if 1 = Referral
+    // TODO: add recipient type
     struct FeeRecipient {
         address recipient;
         uint16 BPS;
@@ -224,6 +230,7 @@ contract CUBE is
     /// @param tokenType The token type
     /// @param rakeBps The rake basis points
     /// @param factoryAddress The escrow factory address
+    /// @param rewardRecipient The address of the reward recipient
     struct RewardData {
         address tokenAddress;
         uint256 chainId;
@@ -232,6 +239,7 @@ contract CUBE is
         TokenType tokenType;
         uint256 rakeBps;
         address factoryAddress;
+        address rewardRecipient;
     }
 
     /// @dev Contains data about a specific transaction related to a CUBE
@@ -249,6 +257,7 @@ contract CUBE is
     }
 
     /// @notice Returns the version of the CUBE smart contract
+    // Add state variable for l3Payments enabled
     function cubeVersion() external pure returns (string memory) {
         return "3";
     }
@@ -385,7 +394,7 @@ contract CUBE is
                 IFactory(data.reward.factoryAddress).distributeRewards(
                     data.questId,
                     data.reward.tokenAddress,
-                    data.toAddress,
+                    data.reward.rewardRecipient,
                     data.reward.amount,
                     data.reward.tokenId,
                     data.reward.tokenType,
@@ -399,7 +408,8 @@ contract CUBE is
                 data.reward.chainId,
                 data.reward.amount,
                 data.reward.tokenId,
-                data.reward.tokenType
+                data.reward.tokenType,
+                data.reward.rewardRecipient
             );
         }
     }
@@ -636,6 +646,7 @@ contract CUBE is
     /// @dev Used for converting fee recipient information into a consistent format for EIP712 encoding
     /// @param data The FeeRecipient struct to be encoded
     /// @return A byte array representing the encoded fee recipient data
+    // TODO: add recipient type
     function _encodeRecipient(FeeRecipient calldata data) internal pure returns (bytes memory) {
         return abi.encode(RECIPIENT_DATA_HASH, data.recipient, data.BPS);
     }
@@ -669,7 +680,8 @@ contract CUBE is
                 data.tokenId,
                 data.tokenType,
                 data.rakeBps,
-                data.factoryAddress
+                data.factoryAddress,
+                data.rewardRecipient
             )
         );
     }

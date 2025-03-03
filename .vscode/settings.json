@@ -6,5 +6,18 @@
   "solidity.formatter": "forge",
   "slither.solcPath": "",
   "slither.hiddenDetectors": [],
-  "security.olympix.project.includePath": "/src"
+  "security.olympix.project.includePath": "/src",
+  "wake.compiler.solc.remappings": [
+    "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "erc4626-tests/=lib/openzeppelin-contracts/lib/erc4626-tests/",
+    "openzeppelin-foundry-upgrades/=lib/openzeppelin-foundry-upgrades/src/",
+    "ds-test/=lib/forge-std/lib/ds-test/src/",
+    "forge-std/=lib/forge-std/src/",
+    "foundry-devops/=lib/foundry-devops/",
+    "openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
+    "openzeppelin-contracts/=lib/openzeppelin-contracts/",
+    "solady/=lib/solady/",
+    "solidity-stringutils/=lib/openzeppelin-foundry-upgrades/lib/solidity-stringutils/"
+  ]
 }
