@@ -68,7 +68,6 @@ contract CUBE is
 
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(string txHash,string networkChainId)");
-    // TODO: add recipient type
     bytes32 internal constant RECIPIENT_DATA_HASH =
         keccak256("FeeRecipient(address recipient,uint16 BPS,RecipientType recipientType)");
     bytes32 internal constant REWARD_DATA_HASH = keccak256(
@@ -270,7 +269,6 @@ contract CUBE is
     }
 
     /// @notice Returns the version of the CUBE smart contract
-    // Add state variable for l3Payments enabled
     function cubeVersion() external pure returns (string memory) {
         return "4";
     }

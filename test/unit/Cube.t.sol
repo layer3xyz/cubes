@@ -56,7 +56,7 @@ contract CubeTest is Test {
         uint256 amount,
         uint256 tokenId,
         ITokenType.TokenType tokenType,
-        address recipient
+        address rewardRecipient
     );
 
     DeployProxy public deployer;
