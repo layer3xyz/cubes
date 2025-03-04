@@ -56,6 +56,7 @@ contract CUBE is
     error CUBE__ERC20TransferFailed();
     error CUBE__ExceedsContractAllowance();
     error CUBE__L3TokenNotSet();
+    error CUBE__L3PaymentsDisabled();
     error CUBE__TreasuryNotSet();
     error CUBE__InvalidAdminAddress();
 
@@ -84,6 +85,7 @@ contract CUBE is
 
     address public s_treasury;
     address public s_l3Token;
+    bool public s_l3PaymentsEnabled;
     bytes4 private constant TRANSFER_ERC20 =
         bytes4(keccak256(bytes("transferFrom(address,address,uint256)")));
 
@@ -192,6 +194,10 @@ contract CUBE is
     /// @notice Emitted when the L3 token address is updated
     /// @param token The L3 token address
     event UpdatedL3Address(address indexed token);
+
+    /// @notice Emitted when L3 payments are enabled or disabled
+    /// @param enabled Boolean indicating whether L3 payments are enabled
+    event L3PaymentsEnabled(bool enabled);
 
     /// @dev Represents the data needed for minting a CUBE.
     /// @param questId The ID of the quest associated with the CUBE
@@ -337,7 +343,11 @@ contract CUBE is
             }
         }
 
-        if (s_l3Token == address(0)) {
+        if (!cubeData.isNative && !s_l3PaymentsEnabled) {
+            revert CUBE__L3PaymentsDisabled();
+        }
+
+        if (s_l3PaymentsEnabled && s_l3Token == address(0)) {
             revert CUBE__L3TokenNotSet();
         }
 
@@ -714,6 +724,13 @@ contract CUBE is
     function setL3TokenAddress(address _l3) external onlyRole(DEFAULT_ADMIN_ROLE) {
         s_l3Token = _l3;
         emit UpdatedL3Address(_l3);
+    }
+    /// @notice Enables or disables L3 payments
+    /// @dev Can only be called by an account with the default admin role.
+    /// @param _l3PaymentsEnabled Boolean indicating whether L3 payments should be enabled
+    function setL3PaymentsEnabled(bool _l3PaymentsEnabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        s_l3PaymentsEnabled = _l3PaymentsEnabled;
+        emit L3PaymentsEnabled(_l3PaymentsEnabled);
     }
 
     /// @notice Withdraws the contract's balance to the message sender

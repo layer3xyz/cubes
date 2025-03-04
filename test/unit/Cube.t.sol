@@ -178,6 +178,7 @@ contract CubeTest is Test {
         vm.label(TREASURY, "Treasury");
 
         cubeContract.setL3TokenAddress(address(l3Token));
+        cubeContract.setL3PaymentsEnabled(true);
         cubeContract.withdraw();
         vm.stopPrank();
     }
@@ -218,6 +219,28 @@ contract CubeTest is Test {
 
         bytes memory signature = _signCubeData(_data, adminPrivateKey);
         vm.prank(BOB);
+        cubeContract.mintCube(_data, signature);
+    }
+
+    function testPayWithL3RevertsWhenDisabled() public {
+        vm.prank(ownerPubKey);
+        cubeContract.setL3PaymentsEnabled(false);
+
+        l3Token.mint(BOB, 1000);
+
+        // let bob give some allowance to the contract
+        vm.prank(BOB);
+        l3Token.approve(address(cubeContract), 600);
+
+        // test a mint and pay with erc20
+        // TODO: figure out why escrows break with L3 payments
+        CUBE.CubeData memory _data = _getCubeData(20);
+        _data.nonce = 0;
+        _data.isNative = false;
+
+        bytes memory signature = _signCubeData(_data, adminPrivateKey);
+        vm.prank(BOB);
+        vm.expectRevert(CUBE.CUBE__L3PaymentsDisabled.selector);
         cubeContract.mintCube(_data, signature);
     }
 
