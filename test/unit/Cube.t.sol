@@ -59,6 +59,13 @@ contract CubeTest is Test {
         address rewardRecipient
     );
 
+    event FeePayout(
+        address indexed recipient,
+        uint256 amount,
+        bool isNative,
+        CUBE.RecipientType recipientType
+    );
+
     DeployProxy public deployer;
     CUBE public cubeContract;
 
@@ -1259,5 +1266,119 @@ contract CubeTest is Test {
         assertEq(l3Token.balanceOf(BOB_SMART_ACCOUNT), initialBobSmartAccountBalanceL3 - 100); // 900
         assertEq(cubeContract.balanceOf(BOB_SMART_ACCOUNT), initialBobSmartAccountBalanceCube); // 0
         assertEq(erc20Mock.balanceOf(BOB_SMART_ACCOUNT), initialBobSmartAccountBalanceMockErc20 + 20); // 20
+    }
+
+    function testSetL3PaymentsEnabled() public {
+        // Check initial state
+        assertTrue(cubeContract.s_l3PaymentsEnabled());
+
+        // Test disabling
+        vm.prank(ownerPubKey);
+        cubeContract.setL3PaymentsEnabled(false);
+        assertFalse(cubeContract.s_l3PaymentsEnabled());
+
+        // Test enabling
+        vm.prank(ownerPubKey);
+        cubeContract.setL3PaymentsEnabled(true);
+        assertTrue(cubeContract.s_l3PaymentsEnabled());
+    }
+
+    function testSetL3PaymentsEnabledRevertsWhenNotAdmin() public {
+        bytes4 selector = bytes4(keccak256("AccessControlUnauthorizedAccount(address,bytes32)"));
+        bytes memory expectedError =
+            abi.encodeWithSelector(selector, BOB, cubeContract.DEFAULT_ADMIN_ROLE());
+        vm.expectRevert(expectedError);
+        vm.prank(BOB);
+        cubeContract.setL3PaymentsEnabled(false);
+    }
+
+    function testFeePayoutEventWithRecipientTypes() public {
+        l3Token.mint(BOB, 1000);
+        vm.prank(BOB);
+        l3Token.approve(address(cubeContract), 600);
+
+        CUBE.CubeData memory _data = _getCubeData(20);
+        _data.nonce = 0;
+        _data.isNative = false;
+        _data.recipients = new CUBE.FeeRecipient[](4);
+        _data.recipients[0] = CUBE.FeeRecipient({
+            recipient: ALICE,
+            BPS: 1000,
+            recipientType: CUBE.RecipientType.LAYER3
+        });
+        _data.recipients[1] = CUBE.FeeRecipient({
+            recipient: BOB,
+            BPS: 2000,
+            recipientType: CUBE.RecipientType.PUBLISHER
+        });
+        _data.recipients[2] = CUBE.FeeRecipient({
+            recipient: address(this),
+            BPS: 1000,
+            recipientType: CUBE.RecipientType.CREATOR
+        });
+        _data.recipients[3] = CUBE.FeeRecipient({
+            recipient: adminAddress,
+            BPS: 1000,
+            recipientType: CUBE.RecipientType.REFERRER
+        });
+
+        bytes memory signature = _signCubeData(_data, adminPrivateKey);
+
+        // Expect FeePayout events with correct recipient types
+        vm.expectEmit(true, true, true, true);
+        emit FeePayout(ALICE, 60, false, CUBE.RecipientType.LAYER3);
+        
+        vm.expectEmit(true, true, true, true);
+        emit FeePayout(BOB, 120, false, CUBE.RecipientType.PUBLISHER);
+        
+        vm.expectEmit(true, true, true, true);
+        emit FeePayout(address(this), 60, false, CUBE.RecipientType.CREATOR);
+        
+        vm.expectEmit(true, true, true, true);
+        emit FeePayout(adminAddress, 60, false, CUBE.RecipientType.REFERRER);
+
+        vm.prank(BOB);
+        cubeContract.mintCube(_data, signature);
+    }
+
+    function testTokenRewardEventWithRewardRecipient() public {
+        address rewardRecipient = makeAddr("rewardRecipient");
+        CUBE.CubeData memory _data = helper.getCubeData({
+            _feeRecipient: ALICE,
+            _mintTo: BOB,
+            factoryAddress: address(factoryContract),
+            tokenAddress: address(erc20Mock),
+            tokenId: 0,
+            tokenType: ITokenType.TokenType.ERC20,
+            rakeBps: 0,
+            chainId: 137,
+            amount: 100,
+            rewardRecipient: rewardRecipient
+        });
+
+        bytes memory signature = _signCubeData(_data, adminPrivateKey);
+
+        // Expect TokenReward event with reward recipient
+        vm.expectEmit(true, true, true, true);
+        emit TokenReward(
+            0,
+            address(erc20Mock),
+            137,
+            100,
+            0,
+            ITokenType.TokenType.ERC20,
+            rewardRecipient
+        );
+
+        hoax(adminAddress, 10 ether);
+        cubeContract.mintCube{value: 10 ether}(_data, signature);
+    }
+
+    function testRecipientTypeEnumValues() public {
+        // Test that enum values are as expected
+        assertEq(uint256(CUBE.RecipientType.LAYER3), 0);
+        assertEq(uint256(CUBE.RecipientType.PUBLISHER), 1);
+        assertEq(uint256(CUBE.RecipientType.CREATOR), 2);
+        assertEq(uint256(CUBE.RecipientType.REFERRER), 3);
     }
 }
