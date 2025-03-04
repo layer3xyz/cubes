@@ -341,14 +341,14 @@ contract CUBE is
                 revert CUBE__FeeNotEnough();
             }
         } else {
-            // Check if L3 token is set
-            if (s_l3Token == address(0)) {
-                revert CUBE__L3TokenNotSet();
-            }
-
             // Check if L3 payments are enabled
             if (!s_l3PaymentsEnabled) {
                 revert CUBE__L3PaymentsDisabled();
+            }
+            
+            // Check if L3 token is set
+            if (s_l3Token == address(0)) {
+                revert CUBE__L3TokenNotSet();
             }
         }
 
