@@ -219,7 +219,6 @@ contract CubeTest is Test {
         l3Token.approve(address(cubeContract), 600);
 
         // test a mint and pay with erc20
-        // TODO: figure out why escrows break with L3 payments
         CUBE.CubeData memory _data = _getCubeData(20);
         _data.nonce = 0;
         _data.isNative = false;
@@ -240,7 +239,6 @@ contract CubeTest is Test {
         l3Token.approve(address(cubeContract), 600);
 
         // test a mint and pay with erc20
-        // TODO: figure out why escrows break with L3 payments
         CUBE.CubeData memory _data = _getCubeData(20);
         _data.nonce = 0;
         _data.isNative = false;
@@ -258,7 +256,6 @@ contract CubeTest is Test {
         l3Token.approve(address(cubeContract), 300); // approve less than the price of 600
 
         // test a mint and pay with erc20
-        // TODO: figure out why escrows break with L3 payments
         CUBE.CubeData memory _data = _getCubeData(20);
         _data.nonce = 0;
         _data.isNative = false;
@@ -278,7 +275,6 @@ contract CubeTest is Test {
         l3Token.approve(address(cubeContract), 600); // approve less than the price of 600
 
         // test a mint and pay with erc20
-        // TODO: figure out why escrows break with L3 payments
         CUBE.CubeData memory _data = _getCubeData(20);
         _data.nonce = 0;
         _data.isNative = false;
@@ -1327,13 +1323,13 @@ contract CubeTest is Test {
         // Expect FeePayout events with correct recipient types
         vm.expectEmit(true, true, true, true);
         emit FeePayout(ALICE, 60, false, CUBE.RecipientType.LAYER3);
-        
+
         vm.expectEmit(true, true, true, true);
         emit FeePayout(BOB, 120, false, CUBE.RecipientType.PUBLISHER);
-        
+
         vm.expectEmit(true, true, true, true);
         emit FeePayout(address(this), 60, false, CUBE.RecipientType.CREATOR);
-        
+
         vm.expectEmit(true, true, true, true);
         emit FeePayout(adminAddress, 60, false, CUBE.RecipientType.REFERRER);
 
@@ -1361,13 +1357,7 @@ contract CubeTest is Test {
         // Expect TokenReward event with reward recipient
         vm.expectEmit(true, true, true, true);
         emit TokenReward(
-            0,
-            address(erc20Mock),
-            137,
-            100,
-            0,
-            ITokenType.TokenType.ERC20,
-            rewardRecipient
+            0, address(erc20Mock), 137, 100, 0, ITokenType.TokenType.ERC20, rewardRecipient
         );
 
         hoax(adminAddress, 10 ether);

@@ -13,7 +13,6 @@ pragma solidity 0.8.20;
 import {EIP712Upgradeable} from
     "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC721Upgradeable} from
     "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
@@ -44,17 +43,14 @@ contract CUBE is
     error CUBE__IsNotSigner();
     error CUBE__MintingIsNotActive();
     error CUBE__FeeNotEnough();
-    error CUBE__SignatureAndCubesInputMismatch();
     error CUBE__WithdrawFailed();
     error CUBE__NonceAlreadyUsed();
     error CUBE__TransferFailed();
     error CUBE__BPSTooHigh();
     error CUBE__ExcessiveFeePayout();
     error CUBE__ExceedsContractBalance();
-    error CUBE__QuestNotActive();
     error CUBE__NativePaymentFailed();
     error CUBE__ERC20TransferFailed();
-    error CUBE__ExceedsContractAllowance();
     error CUBE__L3TokenNotSet();
     error CUBE__L3PaymentsDisabled();
     error CUBE__TreasuryNotSet();
@@ -334,23 +330,26 @@ contract CUBE is
             revert CUBE__MintingIsNotActive();
         }
 
+        if (s_treasury == address(0)) {
+            revert CUBE__TreasuryNotSet();
+        }
+
+        // Validate payment method and amount
         if (cubeData.isNative) {
             // Check if the sent value is at least equal to the price
             if (msg.value < cubeData.price) {
                 revert CUBE__FeeNotEnough();
             }
-        }
+        } else {
+            // Check if L3 token is set
+            if (s_l3Token == address(0)) {
+                revert CUBE__L3TokenNotSet();
+            }
 
-        if (!cubeData.isNative && !s_l3PaymentsEnabled) {
-            revert CUBE__L3PaymentsDisabled();
-        }
-
-        if (s_l3PaymentsEnabled && s_l3Token == address(0)) {
-            revert CUBE__L3TokenNotSet();
-        }
-
-        if (s_treasury == address(0)) {
-            revert CUBE__TreasuryNotSet();
+            // Check if L3 payments are enabled
+            if (!s_l3PaymentsEnabled) {
+                revert CUBE__L3PaymentsDisabled();
+            }
         }
 
         _mintCube(cubeData, signature);

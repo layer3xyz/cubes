@@ -80,7 +80,11 @@ contract Helper is CUBE {
         });
 
         CUBE.FeeRecipient[] memory recipients = new CUBE.FeeRecipient[](1);
-        recipients[0] = CUBE.FeeRecipient({recipient: _feeRecipient, BPS: 3300, recipientType: CUBE.RecipientType.LAYER3}); // 33%
+        recipients[0] = CUBE.FeeRecipient({
+            recipient: _feeRecipient,
+            BPS: 3300, // 33%
+            recipientType: CUBE.RecipientType.LAYER3
+        });
         return CUBE.CubeData({
             questId: 1,
             nonce: 1,
