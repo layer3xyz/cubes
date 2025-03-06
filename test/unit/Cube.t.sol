@@ -56,14 +56,14 @@ contract CubeTest is Test {
         uint256 amount,
         uint256 tokenId,
         ITokenType.TokenType tokenType,
-        address rewardRecipient
+        address rewardRecipientAddress
     );
 
     event FeePayout(
         address indexed recipient,
         uint256 amount,
         bool isNative,
-        CUBE.RecipientType recipientType
+        CUBE.FeeRecipientType recipientType
     );
 
     DeployProxy public deployer;
@@ -201,7 +201,7 @@ contract CubeTest is Test {
             rakeBps: 0,
             amount: 10,
             chainId: 137,
-            rewardRecipient: makeAddr("rewardRecipient")
+            rewardRecipientAddress: makeAddr("rewardRecipientAddress")
         });
         _data.nonce = 0;
 
@@ -387,7 +387,7 @@ contract CubeTest is Test {
         assertEq(address(BOB).balance, initialBobBalanceEth + 2 ether - _getRakeAmount(2 ether, rake));
     }
 
-    function testMintCubeNativeRewardWithUniqueRewardRecipient() public {
+    function testMintCubeNativeRewardWithUniqueRewardRecipientAddress() public {
         uint256 rake = 0;
         address BOB_SMART_ACCOUNT = makeAddr("bob's smart account");
         (CUBE.CubeData memory cubeData, bytes memory signature) = _getCustomSignedCubeMintData(
@@ -688,9 +688,9 @@ contract CubeTest is Test {
     function testMultipleRefPayouts() public {
         CUBE.CubeData memory data = _getCubeData(200);
         data.recipients = new CUBE.FeeRecipient[](3);
-        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500, recipientType: CUBE.RecipientType.LAYER3});
-        data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 4000, recipientType: CUBE.RecipientType.LAYER3});
-        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 4000, recipientType: CUBE.RecipientType.LAYER3});
+        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500, recipientType: CUBE.FeeRecipientType.LAYER3});
+        data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 4000, recipientType: CUBE.FeeRecipientType.LAYER3});
+        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 4000, recipientType: CUBE.FeeRecipientType.LAYER3});
 
         bytes memory signature = _signCubeData(data, adminPrivateKey);
 
@@ -707,9 +707,9 @@ contract CubeTest is Test {
     function testExceedContractBalance() public {
         CUBE.CubeData memory data = _getCubeData(10 ether);
         data.recipients = new CUBE.FeeRecipient[](3);
-        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500, recipientType: CUBE.RecipientType.LAYER3});
-        data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 8000, recipientType: CUBE.RecipientType.LAYER3});
-        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 8000, recipientType: CUBE.RecipientType.LAYER3});
+        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500, recipientType: CUBE.FeeRecipientType.LAYER3});
+        data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 8000, recipientType: CUBE.FeeRecipientType.LAYER3});
+        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 8000, recipientType: CUBE.FeeRecipientType.LAYER3});
 
         bytes memory signature = _signCubeData(data, adminPrivateKey);
 
@@ -724,13 +724,13 @@ contract CubeTest is Test {
     function testTooHighReferrerBPS() public {
         CUBE.CubeData memory data = _getCubeData(100);
         data.recipients = new CUBE.FeeRecipient[](3);
-        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500, recipientType: CUBE.RecipientType.LAYER3});
+        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500, recipientType: CUBE.FeeRecipientType.LAYER3});
         data.recipients[1] = CUBE.FeeRecipient({
             recipient: BOB,
             BPS: 10_001, // max is 10k
-            recipientType: CUBE.RecipientType.LAYER3
+            recipientType: CUBE.FeeRecipientType.LAYER3
         });
-        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 4000, recipientType: CUBE.RecipientType.LAYER3});
+        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 4000, recipientType: CUBE.FeeRecipientType.LAYER3});
 
         bytes memory signature = _signCubeData(data, adminPrivateKey);
 
@@ -742,9 +742,9 @@ contract CubeTest is Test {
     function testTooHighReferralAmount() public {
         CUBE.CubeData memory data = _getCubeData(100);
         data.recipients = new CUBE.FeeRecipient[](3);
-        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500, recipientType: CUBE.RecipientType.LAYER3});
-        data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 9000, recipientType: CUBE.RecipientType.LAYER3});
-        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 4000, recipientType: CUBE.RecipientType.LAYER3});
+        data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500, recipientType: CUBE.FeeRecipientType.LAYER3});
+        data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 9000, recipientType: CUBE.FeeRecipientType.LAYER3});
+        data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 4000, recipientType: CUBE.FeeRecipientType.LAYER3});
 
         bytes memory signature = _signCubeData(data, adminPrivateKey);
 
@@ -788,9 +788,9 @@ contract CubeTest is Test {
         uint256 preOwnerBalance = TREASURY.balance;
 
         _data.recipients = new CUBE.FeeRecipient[](3);
-        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500, recipientType: CUBE.RecipientType.LAYER3});
-        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 800, recipientType: CUBE.RecipientType.LAYER3});
-        _data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 1000, recipientType: CUBE.RecipientType.LAYER3});
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 500, recipientType: CUBE.FeeRecipientType.LAYER3});
+        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 800, recipientType: CUBE.FeeRecipientType.LAYER3});
+        _data.recipients[2] = CUBE.FeeRecipient({recipient: adminAddress, BPS: 1000, recipientType: CUBE.FeeRecipientType.LAYER3});
 
         bytes memory signature = _signCubeData(_data, adminPrivateKey);
 
@@ -955,7 +955,7 @@ contract CubeTest is Test {
         assertEq(isActive3, false);
     }
 
-    function testInitializedNFT() public {
+    function testInitializedNFT() public view {
         string memory name = cubeContract.name();
         string memory symbol = cubeContract.symbol();
 
@@ -995,7 +995,7 @@ contract CubeTest is Test {
             rakeBps: 0,
             chainId: 137,
             amount: amount,
-            rewardRecipient: BOB
+            rewardRecipientAddress: BOB
         });
     }
 
@@ -1018,7 +1018,7 @@ contract CubeTest is Test {
         ITokenType.TokenType tokenType,
         uint256 rakeBps,
         uint256 chainId,
-        address rewardRecipient
+        address rewardRecipientAddress
     ) internal view returns (CUBE.CubeData memory, bytes memory) {
         CUBE.CubeData memory _data = helper.getCubeData({
             _feeRecipient: ALICE,
@@ -1030,7 +1030,7 @@ contract CubeTest is Test {
             rakeBps: rakeBps,
             amount: amount,
             chainId: chainId,
-            rewardRecipient: rewardRecipient
+            rewardRecipientAddress: rewardRecipientAddress
         });
 
         bytes memory signature = _signCubeData(_data, adminPrivateKey);
@@ -1072,7 +1072,7 @@ contract CubeTest is Test {
         cubeContract.withdraw();
     }
 
-    function testEmptyTokenURI() public {
+    function testEmptyTokenURI() public view {
         // get tokenURI for some random non-existing token
         string memory uri = cubeContract.tokenURI(15);
         assertEq(uri, "");
@@ -1090,7 +1090,7 @@ contract CubeTest is Test {
         cubeContract.mintCube{value: 10}(_data, _sig);
     }
 
-    function testCubeVersion() public {
+    function testCubeVersion() public view {
         string memory v = cubeContract.cubeVersion();
         assertEq(v, "4");
     }
@@ -1111,8 +1111,8 @@ contract CubeTest is Test {
         _data.nonce = 0;
         _data.isNative = false;
         _data.recipients = new CUBE.FeeRecipient[](2);
-        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 5000, recipientType: CUBE.RecipientType.LAYER3}); // 50%
-        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000, recipientType: CUBE.RecipientType.LAYER3}); // 50%
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 5000, recipientType: CUBE.FeeRecipientType.LAYER3}); // 50%
+        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000, recipientType: CUBE.FeeRecipientType.LAYER3}); // 50%
 
         bytes memory signature = _signCubeData(_data, adminPrivateKey);
 
@@ -1130,8 +1130,8 @@ contract CubeTest is Test {
         _data.nonce = 0;
         _data.isNative = false;
         _data.recipients = new CUBE.FeeRecipient[](2);
-        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 0, recipientType: CUBE.RecipientType.LAYER3}); // 0%
-        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000, recipientType: CUBE.RecipientType.LAYER3}); // 50%
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 0, recipientType: CUBE.FeeRecipientType.LAYER3}); // 0%
+        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000, recipientType: CUBE.FeeRecipientType.LAYER3}); // 50%
 
         bytes memory signature = _signCubeData(_data, adminPrivateKey);
 
@@ -1154,8 +1154,8 @@ contract CubeTest is Test {
         _data.nonce = 0;
         _data.isNative = false;
         _data.recipients = new CUBE.FeeRecipient[](2);
-        _data.recipients[0] = CUBE.FeeRecipient({recipient: address(0), BPS: 3000, recipientType: CUBE.RecipientType.LAYER3}); // 30%
-        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000, recipientType: CUBE.RecipientType.LAYER3}); // 50%
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: address(0), BPS: 3000, recipientType: CUBE.FeeRecipientType.LAYER3}); // 30%
+        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000, recipientType: CUBE.FeeRecipientType.LAYER3}); // 50%
 
         bytes memory signature = _signCubeData(_data, adminPrivateKey);
 
@@ -1177,7 +1177,7 @@ contract CubeTest is Test {
         _data.nonce = 0;
         _data.isNative = false;
         _data.recipients = new CUBE.FeeRecipient[](1);
-        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 3000, recipientType: CUBE.RecipientType.LAYER3}); // 30%
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 3000, recipientType: CUBE.FeeRecipientType.LAYER3}); // 30%
 
         bytes memory signature = _signCubeData(_data, adminPrivateKey);
 
@@ -1200,9 +1200,9 @@ contract CubeTest is Test {
         _data.isNative = false;
         _data.price = 0;  // Set price to 0
         _data.recipients = new CUBE.FeeRecipient[](3);  // Multiple recipients
-        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 3000, recipientType: CUBE.RecipientType.LAYER3});
-        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000, recipientType: CUBE.RecipientType.LAYER3});
-        _data.recipients[2] = CUBE.FeeRecipient({recipient: address(this), BPS: 1000, recipientType: CUBE.RecipientType.LAYER3});
+        _data.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 3000, recipientType: CUBE.FeeRecipientType.LAYER3});
+        _data.recipients[1] = CUBE.FeeRecipient({recipient: BOB, BPS: 5000, recipientType: CUBE.FeeRecipientType.LAYER3});
+        _data.recipients[2] = CUBE.FeeRecipient({recipient: address(this), BPS: 1000, recipientType: CUBE.FeeRecipientType.LAYER3});
 
         bytes memory signature = _signCubeData(_data, adminPrivateKey);
 
@@ -1215,7 +1215,7 @@ contract CubeTest is Test {
         assertEq(l3Token.balanceOf(ALICE), 0);
     }
 
-    function testPayWithL3WithUniqueRewardRecipient() public {
+    function testPayWithL3WithUniqueRewardRecipientAddress() public {
         address BOB_SMART_ACCOUNT = makeAddr("bob's smart account");
         l3Token.mint(BOB_SMART_ACCOUNT, 1000);
 
@@ -1233,7 +1233,7 @@ contract CubeTest is Test {
             rakeBps: 0,
             chainId: 137,
             amount: 20,
-            rewardRecipient: BOB_SMART_ACCOUNT
+            rewardRecipientAddress: BOB_SMART_ACCOUNT
         });
         _data.nonce = 0;
         _data.isNative = false;
@@ -1300,45 +1300,45 @@ contract CubeTest is Test {
         _data.recipients[0] = CUBE.FeeRecipient({
             recipient: ALICE,
             BPS: 1000,
-            recipientType: CUBE.RecipientType.LAYER3
+            recipientType: CUBE.FeeRecipientType.LAYER3
         });
         _data.recipients[1] = CUBE.FeeRecipient({
             recipient: BOB,
             BPS: 2000,
-            recipientType: CUBE.RecipientType.PUBLISHER
+            recipientType: CUBE.FeeRecipientType.PUBLISHER
         });
         _data.recipients[2] = CUBE.FeeRecipient({
             recipient: address(this),
             BPS: 1000,
-            recipientType: CUBE.RecipientType.CREATOR
+            recipientType: CUBE.FeeRecipientType.CREATOR
         });
         _data.recipients[3] = CUBE.FeeRecipient({
             recipient: adminAddress,
             BPS: 1000,
-            recipientType: CUBE.RecipientType.REFERRER
+            recipientType: CUBE.FeeRecipientType.REFERRER
         });
 
         bytes memory signature = _signCubeData(_data, adminPrivateKey);
 
         // Expect FeePayout events with correct recipient types
         vm.expectEmit(true, true, true, true);
-        emit FeePayout(ALICE, 60, false, CUBE.RecipientType.LAYER3);
+        emit FeePayout(ALICE, 60, false, CUBE.FeeRecipientType.LAYER3);
 
         vm.expectEmit(true, true, true, true);
-        emit FeePayout(BOB, 120, false, CUBE.RecipientType.PUBLISHER);
+        emit FeePayout(BOB, 120, false, CUBE.FeeRecipientType.PUBLISHER);
 
         vm.expectEmit(true, true, true, true);
-        emit FeePayout(address(this), 60, false, CUBE.RecipientType.CREATOR);
+        emit FeePayout(address(this), 60, false, CUBE.FeeRecipientType.CREATOR);
 
         vm.expectEmit(true, true, true, true);
-        emit FeePayout(adminAddress, 60, false, CUBE.RecipientType.REFERRER);
+        emit FeePayout(adminAddress, 60, false, CUBE.FeeRecipientType.REFERRER);
 
         vm.prank(BOB);
         cubeContract.mintCube(_data, signature);
     }
 
-    function testTokenRewardEventWithRewardRecipient() public {
-        address rewardRecipient = makeAddr("rewardRecipient");
+    function testTokenRewardEventWithRewardRecipientAddress() public {
+        address rewardRecipientAddress = makeAddr("rewardRecipientAddress");
         CUBE.CubeData memory _data = helper.getCubeData({
             _feeRecipient: ALICE,
             _mintTo: BOB,
@@ -1349,7 +1349,7 @@ contract CubeTest is Test {
             rakeBps: 0,
             chainId: 137,
             amount: 100,
-            rewardRecipient: rewardRecipient
+            rewardRecipientAddress: rewardRecipientAddress
         });
 
         bytes memory signature = _signCubeData(_data, adminPrivateKey);
@@ -1357,18 +1357,18 @@ contract CubeTest is Test {
         // Expect TokenReward event with reward recipient
         vm.expectEmit(true, true, true, true);
         emit TokenReward(
-            0, address(erc20Mock), 137, 100, 0, ITokenType.TokenType.ERC20, rewardRecipient
+            0, address(erc20Mock), 137, 100, 0, ITokenType.TokenType.ERC20, rewardRecipientAddress
         );
 
         hoax(adminAddress, 10 ether);
         cubeContract.mintCube{value: 10 ether}(_data, signature);
     }
 
-    function testRecipientTypeEnumValues() public {
+    function testRecipientTypeEnumValues() public pure {
         // Test that enum values are as expected
-        assertEq(uint256(CUBE.RecipientType.LAYER3), 0);
-        assertEq(uint256(CUBE.RecipientType.PUBLISHER), 1);
-        assertEq(uint256(CUBE.RecipientType.CREATOR), 2);
-        assertEq(uint256(CUBE.RecipientType.REFERRER), 3);
+        assertEq(uint256(CUBE.FeeRecipientType.LAYER3), 0);
+        assertEq(uint256(CUBE.FeeRecipientType.PUBLISHER), 1);
+        assertEq(uint256(CUBE.FeeRecipientType.CREATOR), 2);
+        assertEq(uint256(CUBE.FeeRecipientType.REFERRER), 3);
     }
 }
