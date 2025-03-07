@@ -13,7 +13,6 @@ pragma solidity 0.8.20;
 import {EIP712Upgradeable} from
     "@openzeppelin/contracts-upgradeable/utils/cryptography/EIP712Upgradeable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ERC721Upgradeable} from
     "@openzeppelin/contracts-upgradeable/token/ERC721/ERC721Upgradeable.sol";
@@ -44,18 +43,16 @@ contract CUBE is
     error CUBE__IsNotSigner();
     error CUBE__MintingIsNotActive();
     error CUBE__FeeNotEnough();
-    error CUBE__SignatureAndCubesInputMismatch();
     error CUBE__WithdrawFailed();
     error CUBE__NonceAlreadyUsed();
     error CUBE__TransferFailed();
     error CUBE__BPSTooHigh();
     error CUBE__ExcessiveFeePayout();
     error CUBE__ExceedsContractBalance();
-    error CUBE__QuestNotActive();
     error CUBE__NativePaymentFailed();
     error CUBE__ERC20TransferFailed();
-    error CUBE__ExceedsContractAllowance();
     error CUBE__L3TokenNotSet();
+    error CUBE__L3PaymentsDisabled();
     error CUBE__TreasuryNotSet();
     error CUBE__InvalidAdminAddress();
 
@@ -68,12 +65,12 @@ contract CUBE is
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(string txHash,string networkChainId)");
     bytes32 internal constant RECIPIENT_DATA_HASH =
-        keccak256("FeeRecipient(address recipient,uint16 BPS)");
+        keccak256("FeeRecipient(address recipient,uint16 BPS,uint8 recipientType)");
     bytes32 internal constant REWARD_DATA_HASH = keccak256(
-        "RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress)"
+        "RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress,address rewardRecipientAddress)"
     );
     bytes32 internal constant CUBE_DATA_HASH = keccak256(
-        "CubeData(uint256 questId,uint256 nonce,uint256 price,bool isNative,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress)TransactionData(string txHash,string networkChainId)"
+        "CubeData(uint256 questId,uint256 nonce,uint256 price,bool isNative,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS,uint8 recipientType)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress,address rewardRecipientAddress)TransactionData(string txHash,string networkChainId)"
     );
 
     mapping(uint256 => uint256) internal s_questIssueNumbers;
@@ -83,6 +80,7 @@ contract CUBE is
 
     address public s_treasury;
     address public s_l3Token;
+    bool public s_l3PaymentsEnabled;
     bytes4 private constant TRANSFER_ERC20 =
         bytes4(keccak256(bytes("transferFrom(address,address,uint256)")));
 
@@ -95,6 +93,13 @@ contract CUBE is
         BEGINNER,
         INTERMEDIATE,
         ADVANCED
+    }
+
+    enum FeeRecipientType {
+        LAYER3,
+        PUBLISHER,
+        CREATOR,
+        REFERRER
     }
 
     /// @notice Emitted when a new quest is initialized
@@ -147,20 +152,23 @@ contract CUBE is
     /// @param amount The amount of the reward
     /// @param tokenId Token ID of the reward (only applicable for ERC721 and ERC1155)
     /// @param tokenType The type of reward token
+    /// @param rewardRecipientAddress The address of the reward recipient
     event TokenReward(
         uint256 indexed cubeTokenId,
         address indexed tokenAddress,
         uint256 indexed chainId,
         uint256 amount,
         uint256 tokenId,
-        TokenType tokenType
+        TokenType tokenType,
+        address rewardRecipientAddress
     );
 
     /// @notice Emitted when a fee payout is made
     /// @param recipient The address of the payout recipient
     /// @param amount The amount of the payout
     /// @param isNative If the payout was made in native currency
-    event FeePayout(address indexed recipient, uint256 amount, bool isNative);
+    /// @param recipientType The type of recipient (LAYER3, PUBLISHER, CREATOR, REFERRER)
+    event FeePayout(address indexed recipient, uint256 amount, bool isNative, FeeRecipientType recipientType);
 
     /// @notice Emitted when the minting switch is turned on/off
     /// @param isActive The boolean showing if the minting is active or not
@@ -181,6 +189,10 @@ contract CUBE is
     /// @notice Emitted when the L3 token address is updated
     /// @param token The L3 token address
     event UpdatedL3Address(address indexed token);
+
+    /// @notice Emitted when L3 payments are enabled or disabled
+    /// @param enabled Boolean indicating whether L3 payments are enabled
+    event L3PaymentsEnabled(bool enabled);
 
     /// @dev Represents the data needed for minting a CUBE.
     /// @param questId The ID of the quest associated with the CUBE
@@ -211,9 +223,11 @@ contract CUBE is
     /// @dev Represents a recipient for fee distribution.
     /// @param recipient The address of the fee recipient
     /// @param BPS The basis points representing the fee percentage for the recipient
+    /// @param recipientType The type of recipient (LAYER3, PUBLISHER, CREATOR, REFERRER)
     struct FeeRecipient {
         address recipient;
         uint16 BPS;
+        FeeRecipientType recipientType;
     }
 
     /// @dev Contains data about the token rewards associated with a CUBE.
@@ -224,6 +238,7 @@ contract CUBE is
     /// @param tokenType The token type
     /// @param rakeBps The rake basis points
     /// @param factoryAddress The escrow factory address
+    /// @param rewardRecipientAddress The address of the reward recipient
     struct RewardData {
         address tokenAddress;
         uint256 chainId;
@@ -232,6 +247,7 @@ contract CUBE is
         TokenType tokenType;
         uint256 rakeBps;
         address factoryAddress;
+        address rewardRecipientAddress;
     }
 
     /// @dev Contains data about a specific transaction related to a CUBE
@@ -250,7 +266,7 @@ contract CUBE is
 
     /// @notice Returns the version of the CUBE smart contract
     function cubeVersion() external pure returns (string memory) {
-        return "3";
+        return "4";
     }
 
     /// @notice Initializes the CUBE contract with necessary parameters
@@ -314,19 +330,26 @@ contract CUBE is
             revert CUBE__MintingIsNotActive();
         }
 
+        if (s_treasury == address(0)) {
+            revert CUBE__TreasuryNotSet();
+        }
+
+        // Validate payment method and amount
         if (cubeData.isNative) {
             // Check if the sent value is at least equal to the price
             if (msg.value < cubeData.price) {
                 revert CUBE__FeeNotEnough();
             }
-        }
-
-        if (s_l3Token == address(0)) {
-            revert CUBE__L3TokenNotSet();
-        }
-
-        if (s_treasury == address(0)) {
-            revert CUBE__TreasuryNotSet();
+        } else {
+            // Check if L3 payments are enabled
+            if (!s_l3PaymentsEnabled) {
+                revert CUBE__L3PaymentsDisabled();
+            }
+            
+            // Check if L3 token is set
+            if (s_l3Token == address(0)) {
+                revert CUBE__L3TokenNotSet();
+            }
         }
 
         _mintCube(cubeData, signature);
@@ -385,7 +408,7 @@ contract CUBE is
                 IFactory(data.reward.factoryAddress).distributeRewards(
                     data.questId,
                     data.reward.tokenAddress,
-                    data.toAddress,
+                    data.reward.rewardRecipientAddress,
                     data.reward.amount,
                     data.reward.tokenId,
                     data.reward.tokenType,
@@ -399,7 +422,8 @@ contract CUBE is
                 data.reward.chainId,
                 data.reward.amount,
                 data.reward.tokenId,
-                data.reward.tokenType
+                data.reward.tokenType,
+                data.reward.rewardRecipientAddress
             );
         }
     }
@@ -448,7 +472,7 @@ contract CUBE is
                 if (!success || (returnData.length > 0 && !abi.decode(returnData, (bool)))) {
                     revert CUBE__ERC20TransferFailed();
                 }
-                emit FeePayout(recipient, amount, data.isNative);
+                emit FeePayout(recipient, amount, data.isNative, data.recipients[i].recipientType);
             }
 
             unchecked {
@@ -535,7 +559,7 @@ contract CUBE is
                         revert CUBE__TransferFailed();
                     }
 
-                    emit FeePayout(recipient, referralAmount, data.isNative);
+                    emit FeePayout(recipient, referralAmount, data.isNative, data.recipients[i].recipientType);
                 }
                 unchecked {
                     ++i;
@@ -637,7 +661,7 @@ contract CUBE is
     /// @param data The FeeRecipient struct to be encoded
     /// @return A byte array representing the encoded fee recipient data
     function _encodeRecipient(FeeRecipient calldata data) internal pure returns (bytes memory) {
-        return abi.encode(RECIPIENT_DATA_HASH, data.recipient, data.BPS);
+        return abi.encode(RECIPIENT_DATA_HASH, data.recipient, data.BPS, data.recipientType);
     }
 
     /// @notice Encodes an array of fee recipient data into a single bytes32 hash
@@ -669,7 +693,8 @@ contract CUBE is
                 data.tokenId,
                 data.tokenType,
                 data.rakeBps,
-                data.factoryAddress
+                data.factoryAddress,
+                data.rewardRecipientAddress
             )
         );
     }
@@ -696,6 +721,13 @@ contract CUBE is
     function setL3TokenAddress(address _l3) external onlyRole(DEFAULT_ADMIN_ROLE) {
         s_l3Token = _l3;
         emit UpdatedL3Address(_l3);
+    }
+    /// @notice Enables or disables L3 payments
+    /// @dev Can only be called by an account with the default admin role.
+    /// @param _l3PaymentsEnabled Boolean indicating whether L3 payments should be enabled
+    function setL3PaymentsEnabled(bool _l3PaymentsEnabled) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        s_l3PaymentsEnabled = _l3PaymentsEnabled;
+        emit L3PaymentsEnabled(_l3PaymentsEnabled);
     }
 
     /// @notice Withdraws the contract's balance to the message sender

@@ -373,7 +373,7 @@ contract TaskEscrowTest is Test {
         assert(owner == adminAddress);
     }
 
-    function testEscrowERC165Interface() public {
+    function testEscrowERC165Interface() public view {
         // ERC165 - 0x01ffc9a7
         assertEq(taskEscrowMock.supportsInterface(0x01ffc9a7), true);
     }
