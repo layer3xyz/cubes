@@ -168,7 +168,9 @@ contract CUBE is
     /// @param amount The amount of the payout
     /// @param isNative If the payout was made in native currency
     /// @param recipientType The type of recipient (LAYER3, PUBLISHER, CREATOR, REFERRER)
-    event FeePayout(address indexed recipient, uint256 amount, bool isNative, FeeRecipientType recipientType);
+    event FeePayout(
+        address indexed recipient, uint256 amount, bool isNative, FeeRecipientType recipientType
+    );
 
     /// @notice Emitted when the minting switch is turned on/off
     /// @param isActive The boolean showing if the minting is active or not
@@ -345,7 +347,7 @@ contract CUBE is
             if (!s_l3PaymentsEnabled) {
                 revert CUBE__L3PaymentsDisabled();
             }
-            
+
             // Check if L3 token is set
             if (s_l3Token == address(0)) {
                 revert CUBE__L3TokenNotSet();
@@ -559,7 +561,9 @@ contract CUBE is
                         revert CUBE__TransferFailed();
                     }
 
-                    emit FeePayout(recipient, referralAmount, data.isNative, data.recipients[i].recipientType);
+                    emit FeePayout(
+                        recipient, referralAmount, data.isNative, data.recipients[i].recipientType
+                    );
                 }
                 unchecked {
                     ++i;
@@ -722,6 +726,7 @@ contract CUBE is
         s_l3Token = _l3;
         emit UpdatedL3Address(_l3);
     }
+
     /// @notice Enables or disables L3 payments
     /// @dev Can only be called by an account with the default admin role.
     /// @param _l3PaymentsEnabled Boolean indicating whether L3 payments should be enabled
