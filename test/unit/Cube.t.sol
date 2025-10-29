@@ -1544,4 +1544,10 @@ contract CubeTest is Test {
         assertEq(l3Token.balanceOf(address(cubeContract)), 0, "Cube contract should have no L3 balance after sweep");
         assertEq(address(cubeContract).balance, 0, "Cube contract should have no native balance after sweep");
     }
+
+    function testSweepToTreasuryRevertsWhenZeroBalances() public {
+        vm.expectRevert(CUBE.CUBE__NoBalanceToSweep.selector);
+        vm.prank(treasurySweeperAddress);
+        cubeContract.sweepToTreasury();
+    }
 }
