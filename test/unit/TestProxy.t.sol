@@ -32,8 +32,8 @@ contract DeployAndUpgradeTest is StdCheats, Test {
         vm.stopBroadcast();
     }
 
-    /// @dev skipped
-    function _testERC721Name() private {
+    // TODO[test]: FIXME
+    function testERC721Name() public {
         upgradeCube.upgradeCube(OWNER, proxyAddress);
 
         string memory expectedValue = deployProxy.NAME();
@@ -47,8 +47,8 @@ contract DeployAndUpgradeTest is StdCheats, Test {
         upgradeCube.upgradeCube(BOB, proxyAddress);
     }
 
-    /// @dev skipped
-    function testV2SignerRoleVariable() private {
+    // TODO[test]: FIXME
+    function testV2SignerRoleVariable() public {
         upgradeCube.upgradeCube(OWNER, proxyAddress);
 
         CubeV2 newCube = CubeV2(payable(proxyAddress));
@@ -56,8 +56,8 @@ contract DeployAndUpgradeTest is StdCheats, Test {
         assertEq(keccak256("SIGNER"), signerRole);
     }
 
-    /// @dev skipped
-    function testV2MigratedName() private {
+    // TODO[test]: FIXME
+    function testV2MigratedName() public {
         upgradeCube.upgradeCube(OWNER, proxyAddress);
 
         CubeV2 newCube = CubeV2(payable(proxyAddress));

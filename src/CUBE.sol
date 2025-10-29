@@ -57,11 +57,12 @@ contract CUBE is
     error CUBE__InvalidAdminAddress();
     error CUBE__NoBalanceToSweep();
 
-    uint256 internal s_nextTokenId;
-    bool public s_isMintingActive;
 
+    uint256 public constant MAX_BPS = 1e4;
+    
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER");
+    bytes32 public constant TREASURY_SWEEPER_ROLE = keccak256("TREASURY_SWEEPER");
 
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(string txHash,string networkChainId)");
@@ -74,6 +75,12 @@ contract CUBE is
         "CubeData(uint256 questId,uint256 nonce,uint256 price,bool isNative,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS,uint8 recipientType)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress,address rewardRecipientAddress)TransactionData(string txHash,string networkChainId)"
     );
 
+    bytes4 internal constant TRANSFER_ERC20 =
+        bytes4(keccak256(bytes("transferFrom(address,address,uint256)")));
+
+    uint256 internal s_nextTokenId;
+    bool public s_isMintingActive;
+
     mapping(uint256 => uint256) internal s_questIssueNumbers;
     mapping(uint256 => string) internal s_tokenURIs;
     mapping(uint256 nonce => bool isConsumed) internal s_nonces;
@@ -82,16 +89,8 @@ contract CUBE is
     address public s_treasury;
     address public s_l3Token;
     bool public s_l3PaymentsEnabled;
-    bytes4 private constant TRANSFER_ERC20 =
-        bytes4(keccak256(bytes("transferFrom(address,address,uint256)")));
-
     uint256 public s_treasuryBalanceL3;
-
     uint256 public s_treasuryBalanceNative;
-
-    bytes32 public constant TREASURY_SWEEPER_ROLE = keccak256("TREASURY_SWEEPER");
-
-    uint256 public constant MAX_BPS = 1e4;
 
     enum QuestType {
         QUEST,
@@ -205,15 +204,15 @@ contract CUBE is
     /// @param enabled Boolean indicating whether L3 payments are enabled
     event L3PaymentsEnabled(bool enabled);
 
-    /// @notice Emitted when the treasury balance is updated
+    /// @notice Emitted when the internal treasury balance is updated
     /// @param balance The balance of the treasury
     /// @param amount The amount transferred to the treasury
     /// @param isNative If the balance is in native currency or with L3
     event TreasuryBalanceUpdated(uint256 balance, uint256 amount, bool isNative);
 
     /// @notice Emitted when the cube mint fees are swept to the treasury
-    /// @param l3Amount The amount swept to the treasury with L3
     /// @param nativeAmount The amount swept to the treasury with native currency
+    /// @param l3Amount The amount swept to the treasury with L3
     event TreasurySwept(uint256 nativeAmount, uint256 l3Amount);
 
     /// @dev Represents the data needed for minting a CUBE.
@@ -509,15 +508,12 @@ contract CUBE is
     }
 
     function sweepToTreasury() external onlyRole(TREASURY_SWEEPER_ROLE) {
-        uint256 l3Amount = s_treasuryBalanceL3;
-        uint256 nativeAmount = s_treasuryBalanceNative;
+        if (s_treasury == address(0)) revert CUBE__TreasuryNotSet();
 
-        if (l3Amount == 0 && nativeAmount == 0) {
-            revert CUBE__NoBalanceToSweep();
-        }
+        (uint256 l3Amount, uint256 nativeAmount) = (s_treasuryBalanceL3, s_treasuryBalanceNative);
+        if (l3Amount == 0 && nativeAmount == 0) revert CUBE__NoBalanceToSweep();
 
-        s_treasuryBalanceL3 = 0;
-        s_treasuryBalanceNative = 0;
+        s_treasuryBalanceL3 = s_treasuryBalanceNative = 0;
 
         if (l3Amount > 0) {
             (bool successL3, bytes memory returnDataL3) = s_l3Token.call(
