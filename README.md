@@ -143,3 +143,51 @@ _Note: All bounties are at the discretion of the Layer3 team and will be awarded
 ### License
 
 This repo is released under the Apache 2 license, see [LICENSE](./LICENSE) for more details. However, some files are licensed under MIT, such as the test and script files.
+
+### Deployments
+
+| Network | Address |
+| --- | --- |
+| Linea | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Base | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Arbitrum | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Optimism | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Polygon | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| BNB Chain | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Unichain | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Ink | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Soneium | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Bob | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Superposition | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Berachain | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Superseed | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Mantle | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Flare | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Sonic | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| HyperEVM | 0x06c5aD0A96437eE1003390C33Cb180e5aD97e1E9 |
+| Scroll | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Celo | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Etherlink | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Polygon zkEVM | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Mode | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Zora | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Metis | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Blast | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Gnosis | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Fuse | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Avalanche | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| XLayer | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| ZetaChain | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Taiko | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Immutable | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Cyber | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Redstone | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Fraxtal | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Monad Testnet | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Basecamp Testnet | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| Lisk | 0x1195cf65f83b3a5768f3c496d3a05ad6412c64b7 |
+| zkSync Era | 0xF77bd7c05598E094bc06e34bB81C07Bd3B091dB1 |
+| Zero | 0xF77bd7c05598E094bc06e34bB81C07Bd3B091dB1 |
+| zkCandy | 0xF77bd7c05598E094bc06e34bB81C07Bd3B091dB1 |
+| Plume | 0xF77bd7c05598E094bc06e34bB81C07Bd3B091dB1 |
+| Mezo | 0x7B424f545B8B0FcDeF08eA128A0Ac57219F21f40 |
