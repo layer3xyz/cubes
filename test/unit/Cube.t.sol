@@ -66,6 +66,10 @@ contract CubeTest is Test {
         CUBE.FeeRecipientType recipientType
     );
 
+    event TreasuryBalanceUpdated(uint256 balance, uint256 amount, bool isNative);
+
+    event TreasurySwept(uint256 nativeAmount, uint256 l3Amount);
+
     DeployProxy public deployer;
     CUBE public cubeContract;
 
@@ -95,6 +99,10 @@ contract CubeTest is Test {
     address public ALICE = makeAddr("alice");
     address public BOB = makeAddr("bob");
     address public TREASURY = makeAddr("treasury");
+
+    address public treasurySweeperAddress;
+    address public TREASURY_SWEEPER_ADDRESS = makeAddr("treasury sweeper");
+    uint256 internal treasurySweeperPrivateKey;
 
     address public notAdminAddress;
     uint256 internal notAdminPrivKey;
@@ -128,6 +136,10 @@ contract CubeTest is Test {
         notAdminAddress = vm.addr(notAdminPrivKey);
         vm.label(notAdminAddress, "Not Admin");
 
+        treasurySweeperPrivateKey = 0x02;
+        treasurySweeperAddress = vm.addr(treasurySweeperPrivateKey);
+        vm.label(treasurySweeperAddress, "Treasury Sweeper");
+
         deployer = new DeployProxy();
         proxyAddress = deployer.deployProxy(ownerPubKey);
         vm.label(proxyAddress, "CUBE Proxy");
@@ -135,6 +147,7 @@ contract CubeTest is Test {
 
         vm.startBroadcast(ownerPubKey);
         cubeContract.grantRole(cubeContract.SIGNER_ROLE(), adminAddress);
+        cubeContract.grantRole(cubeContract.TREASURY_SWEEPER_ROLE(), treasurySweeperAddress);
         vm.stopBroadcast();
 
         deployEscrow = new DeployEscrow();
@@ -807,9 +820,22 @@ contract CubeTest is Test {
         assertEq(adminAddress.balance, expectedBalAdmin);
         // 23% taken by referrers, so 77% should be left
         uint256 expectedMintProfit = amount * 7700 / 10_000;
-        assertEq(TREASURY.balance, expectedMintProfit);
+        
+        // The treasury should be empty until we sweep the balance to the treasury
+        assertEq(TREASURY.balance, 0);
 
+        // Ensure cube contract stored the treasury balance update
+        assertEq(cubeContract.s_treasuryBalanceNative(), expectedMintProfit);
+
+        // Sweep the remaining balance to the treasury
+        vm.prank(treasurySweeperAddress);
+        cubeContract.sweepToTreasury();
+
+        // The treasury should now have the expected mint profit
         assertEq(TREASURY.balance - preOwnerBalance, expectedMintProfit);
+
+        // The contract should have no remaining balance
+        assertEq(cubeContract.s_treasuryBalanceNative(), 0);
     }
 
     function testReferralFees() public {
@@ -823,12 +849,26 @@ contract CubeTest is Test {
         cubeContract.mintCube{value: amount}(cubeData, signatures);
 
         uint256 balanceAlice = ALICE.balance;
-        uint256 balanceTreasury = TREASURY.balance;
+        uint256 balanceAliceExpected = amount * 3300 / 10_000;
+        uint256 balanceTreasuryExpected = amount - balanceAliceExpected;
 
-        uint256 expectedBal = amount * 3300 / 10_000;
+        assertEq(balanceAlice, balanceAliceExpected);
 
-        assertEq(balanceAlice, expectedBal);
-        assertEq(balanceTreasury, (amount - expectedBal) + preTreasuryBalance);
+        // The treasury should be empty until we sweep the balance to the treasury
+        assertEq(TREASURY.balance, preTreasuryBalance, "Treasury should not receive funds until sweep");
+        
+        // Ensure cube contract stored the treasury balance update
+        assertEq(cubeContract.s_treasuryBalanceNative(), balanceTreasuryExpected, "Cube contract should store the treasury balance update");
+
+        // Sweep the remaining balance to the treasury
+        vm.prank(treasurySweeperAddress);
+        cubeContract.sweepToTreasury();
+
+        // The treasury should now have the expected mint profit
+        assertEq(TREASURY.balance, preTreasuryBalance + balanceTreasuryExpected, "Treasury should receive the mint profit");
+        
+        // The contract should have no remaining balance
+        assertEq(cubeContract.s_treasuryBalanceNative(), 0);
     }
 
     function testUnpublishQuest(uint256 questId) public {
@@ -1092,7 +1132,7 @@ contract CubeTest is Test {
 
     function testCubeVersion() public view {
         string memory v = cubeContract.cubeVersion();
-        assertEq(v, "4");
+        assertEq(v, "4.1");
     }
 
     function testMintWithNoFee() public {
@@ -1184,8 +1224,27 @@ contract CubeTest is Test {
         vm.prank(BOB);
         cubeContract.mintCube(_data, signature);
 
+        uint256 balanceAliceExpected = (3000 * 600) / 10_000;
+        uint256 balanceTreasuryExpected = initialTreasuryBalance + (7000 * 600) / 10_000;
+
+        // Check that ALICE received their share (30% of 600 = 180)
+        assertEq(l3Token.balanceOf(ALICE), balanceAliceExpected, "ALICE should receive their share");
+
+        // The treasury should be empty until we sweep the balance to the treasury
+        assertEq(l3Token.balanceOf(TREASURY), initialTreasuryBalance, "Treasury should not receive funds until sweep");
+        
+        // Ensure cube contract logged the treasury balance update
+        assertEq(cubeContract.s_treasuryBalanceL3(), balanceTreasuryExpected, "Cube contract should store the treasury balance update");
+
+        // Sweep the remaining balance to the treasury
+        vm.prank(treasurySweeperAddress);
+        cubeContract.sweepToTreasury();
+
         // Check that treasury received remaining 70%
-        assertEq(l3Token.balanceOf(TREASURY), initialTreasuryBalance + (7000 * 600 / 10_000));
+        assertEq(l3Token.balanceOf(TREASURY), balanceTreasuryExpected, "Treasury should receive the mint profit");
+        
+        // Make sure the contract has no remaining balance
+        assertEq(cubeContract.s_treasuryBalanceL3(), 0);
     }
 
     function testPayWithL3ZeroPrice() public {
@@ -1370,5 +1429,119 @@ contract CubeTest is Test {
         assertEq(uint256(CUBE.FeeRecipientType.PUBLISHER), 1);
         assertEq(uint256(CUBE.FeeRecipientType.CREATOR), 2);
         assertEq(uint256(CUBE.FeeRecipientType.REFERRER), 3);
+    }
+
+    function testSweepToTreasury() public {
+        
+        uint256 initialTreasuryBalanceL3 = l3Token.balanceOf(TREASURY);
+        uint256 expectedAmountToTreasury = (6700 * 600) / 10_000;
+        uint256 expectedAmountToTreasuryAfterSecondCube = expectedAmountToTreasury * 2;
+        
+        /////////////////////////
+        // Mint a cube with L3 //
+        /////////////////////////
+        l3Token.mint(BOB, 1200);
+        vm.prank(BOB);
+        l3Token.approve(address(cubeContract), 1200);
+
+        CUBE.CubeData memory cubeDataL3 = _getCubeData(20);
+        cubeDataL3.nonce = 0;
+        cubeDataL3.isNative = false;
+        cubeDataL3.recipients = new CUBE.FeeRecipient[](1);
+        cubeDataL3.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 3300, recipientType: CUBE.FeeRecipientType.LAYER3});
+
+        bytes memory signature = _signCubeData(cubeDataL3, adminPrivateKey);
+
+        vm.expectEmit(true, true, true, true);
+        emit TreasuryBalanceUpdated(initialTreasuryBalanceL3 + expectedAmountToTreasury, expectedAmountToTreasury, false);
+
+        vm.prank(BOB);
+        cubeContract.mintCube(cubeDataL3, signature);
+
+        // Ensure the treasury balance is still the same until we sweep
+        assertEq(l3Token.balanceOf(TREASURY), initialTreasuryBalanceL3, "Treasury should not receive funds until sweep");
+
+        ///////////////////////////////
+        // Mint another cube with L3 //
+        ///////////////////////////////
+        CUBE.CubeData memory cubeDataL3_2 = _getCubeData(20);
+        cubeDataL3_2.nonce = 1;
+        cubeDataL3_2.isNative = false;
+        cubeDataL3_2.recipients = new CUBE.FeeRecipient[](1);
+        cubeDataL3_2.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 3300, recipientType: CUBE.FeeRecipientType.LAYER3});
+        
+        bytes memory signature2 = _signCubeData(cubeDataL3_2, adminPrivateKey);
+
+        vm.expectEmit(true, true, true, true);
+        emit TreasuryBalanceUpdated(initialTreasuryBalanceL3 + expectedAmountToTreasuryAfterSecondCube, expectedAmountToTreasury, false);
+        
+        vm.prank(BOB);
+        cubeContract.mintCube(cubeDataL3_2, signature2);
+
+        // Ensure the treasury balance is still the same until we sweep
+        assertEq(l3Token.balanceOf(TREASURY), initialTreasuryBalanceL3, "Treasury should not receive funds until sweep");
+
+        //////////////////////////////////////
+        // Mint a cube with native currency //
+        //////////////////////////////////////
+        uint256 initialTreasuryBalanceNative = TREASURY.balance;
+
+        CUBE.CubeData memory cubeDataNative = _getCubeData(100);
+        cubeDataNative.nonce = 2;  // Nonce 0 and 1 are already used
+        cubeDataNative.isNative = true;
+        cubeDataNative.recipients = new CUBE.FeeRecipient[](1);
+        cubeDataNative.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 3300, recipientType: CUBE.FeeRecipientType.LAYER3});
+
+        bytes memory signatures = _signCubeData(cubeDataNative, adminPrivateKey);
+
+        uint256 amount = 600;
+
+        vm.expectEmit(true, true, true, true);
+        emit TreasuryBalanceUpdated(initialTreasuryBalanceNative + expectedAmountToTreasury, expectedAmountToTreasury, true);
+
+        // send from admin
+        hoax(adminAddress, amount);
+        cubeContract.mintCube{value: amount}(cubeDataNative, signatures);
+
+        // Ensure the treasury balance is still the same until we sweep
+        assertEq(TREASURY.balance, initialTreasuryBalanceNative, "Treasury should not receive funds until sweep");
+
+        ////////////////////////////////////////////
+        // Mint another cube with native currency //
+        ////////////////////////////////////////////
+        CUBE.CubeData memory cubeDataNative_2 = _getCubeData(100);
+        cubeDataNative_2.nonce = 3;  // Continue the nonce sequence
+        cubeDataNative_2.isNative = true;
+        cubeDataNative_2.recipients = new CUBE.FeeRecipient[](1);
+        cubeDataNative_2.recipients[0] = CUBE.FeeRecipient({recipient: ALICE, BPS: 3300, recipientType: CUBE.FeeRecipientType.LAYER3});
+        
+        bytes memory signatures2 = _signCubeData(cubeDataNative_2, adminPrivateKey);
+        vm.expectEmit(true, true, true, true);
+        emit TreasuryBalanceUpdated(initialTreasuryBalanceNative + expectedAmountToTreasuryAfterSecondCube, expectedAmountToTreasury, true);
+        
+        hoax(adminAddress, amount);
+        cubeContract.mintCube{value: amount}(cubeDataNative_2, signatures2);
+
+        // Ensure the treasury balance is still the same until we sweep
+        assertEq(TREASURY.balance, initialTreasuryBalanceNative, "Treasury should not receive funds until sweep");
+
+        ///////////////////////////////////////////////
+        // Sweep the treasury tokens to the treasury //
+        ///////////////////////////////////////////////
+        vm.expectEmit(true, true, true, true);
+        emit TreasurySwept(expectedAmountToTreasuryAfterSecondCube, expectedAmountToTreasuryAfterSecondCube);
+        
+        vm.prank(treasurySweeperAddress);
+        cubeContract.sweepToTreasury();
+
+        // Ensure the treasury balance is empty
+        assertEq(l3Token.balanceOf(TREASURY), expectedAmountToTreasuryAfterSecondCube, "Treasury should have received the L3 balance after sweep");
+        assertEq(TREASURY.balance, expectedAmountToTreasuryAfterSecondCube, "Treasury should have received the native balance after sweep");
+
+        // Ensure the contract has no remaining balances
+        assertEq(cubeContract.s_treasuryBalanceL3(), 0, "Cube contract should have no stored L3 balance after sweep");
+        assertEq(cubeContract.s_treasuryBalanceNative(), 0, "Cube contract should have no stored native balance after sweep");
+        assertEq(l3Token.balanceOf(address(cubeContract)), 0, "Cube contract should have no L3 balance after sweep");
+        assertEq(address(cubeContract).balance, 0, "Cube contract should have no native balance after sweep");
     }
 }

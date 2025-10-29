@@ -55,6 +55,7 @@ contract CUBE is
     error CUBE__L3PaymentsDisabled();
     error CUBE__TreasuryNotSet();
     error CUBE__InvalidAdminAddress();
+    error CUBE__NoBalanceToSweep();
 
     uint256 internal s_nextTokenId;
     bool public s_isMintingActive;
@@ -83,6 +84,14 @@ contract CUBE is
     bool public s_l3PaymentsEnabled;
     bytes4 private constant TRANSFER_ERC20 =
         bytes4(keccak256(bytes("transferFrom(address,address,uint256)")));
+
+    uint256 public s_treasuryBalanceL3;
+
+    uint256 public s_treasuryBalanceNative;
+
+    bytes32 public constant TREASURY_SWEEPER_ROLE = keccak256("TREASURY_SWEEPER");
+
+    uint256 public constant MAX_BPS = 1e4;
 
     enum QuestType {
         QUEST,
@@ -196,6 +205,17 @@ contract CUBE is
     /// @param enabled Boolean indicating whether L3 payments are enabled
     event L3PaymentsEnabled(bool enabled);
 
+    /// @notice Emitted when the treasury balance is updated
+    /// @param balance The balance of the treasury
+    /// @param amount The amount transferred to the treasury
+    /// @param isNative If the balance is in native currency or with L3
+    event TreasuryBalanceUpdated(uint256 balance, uint256 amount, bool isNative);
+
+    /// @notice Emitted when the cube mint fees are swept to the treasury
+    /// @param l3Amount The amount swept to the treasury with L3
+    /// @param nativeAmount The amount swept to the treasury with native currency
+    event TreasurySwept(uint256 nativeAmount, uint256 l3Amount);
+
     /// @dev Represents the data needed for minting a CUBE.
     /// @param questId The ID of the quest associated with the CUBE
     /// @param nonce A unique number to prevent replay attacks
@@ -268,7 +288,7 @@ contract CUBE is
 
     /// @notice Returns the version of the CUBE smart contract
     function cubeVersion() external pure returns (string memory) {
-        return "4";
+        return "4.1";
     }
 
     /// @notice Initializes the CUBE contract with necessary parameters
@@ -369,7 +389,8 @@ contract CUBE is
         _validateSignature(data, signature);
 
         // Iterate over all the transactions in the mint request and emit events
-        for (uint256 i = 0; i < data.transactions.length;) {
+        uint256 transactionsLength = data.transactions.length;
+        for (uint256 i = 0; i < transactionsLength;) {
             emit CubeTransaction(
                 tokenId, data.transactions[i].txHash, data.transactions[i].networkChainId
             );
@@ -460,9 +481,8 @@ contract CUBE is
             revert CUBE__ERC20TransferFailed();
         }
 
+        // process payouts to fee recipients
         uint256 recipientsLength = data.recipients.length;
-
-        // process payouts to recipients
         for (uint256 i = 0; i < recipientsLength;) {
             address recipient = data.recipients[i].recipient;
             uint256 amount = payoutAmounts[i];
@@ -484,14 +504,38 @@ contract CUBE is
 
         // Transfer remaining amount to treasury
         uint256 treasuryAmount = data.price - totalAmount;
-        if (treasuryAmount > 0) {
-            (success, returnData) = s_l3Token.call(
-                abi.encodeWithSelector(IERC20.transfer.selector, s_treasury, treasuryAmount)
+        s_treasuryBalanceL3 += treasuryAmount;
+        emit TreasuryBalanceUpdated(s_treasuryBalanceL3, treasuryAmount, false);
+    }
+
+    function sweepToTreasury() external onlyRole(TREASURY_SWEEPER_ROLE) {
+        uint256 l3Amount = s_treasuryBalanceL3;
+        uint256 nativeAmount = s_treasuryBalanceNative;
+
+        if (l3Amount == 0 && nativeAmount == 0) {
+            revert CUBE__NoBalanceToSweep();
+        }
+
+        s_treasuryBalanceL3 = 0;
+        s_treasuryBalanceNative = 0;
+
+        if (l3Amount > 0) {
+            (bool successL3, bytes memory returnDataL3) = s_l3Token.call(
+                abi.encodeWithSelector(IERC20.transfer.selector, s_treasury, l3Amount)
             );
-            if (!success || (returnData.length > 0 && !abi.decode(returnData, (bool)))) {
+            if (!successL3 || (returnDataL3.length > 0 && !abi.decode(returnDataL3, (bool)))) {
                 revert CUBE__ERC20TransferFailed();
             }
         }
+
+        if (nativeAmount > 0) {
+            (bool successNative,) = payable(s_treasury).call{value: nativeAmount}("");
+            if (!successNative) {
+                revert CUBE__NativePaymentFailed();
+            }
+        }
+
+        emit TreasurySwept(nativeAmount, l3Amount);
     }
 
     /// @dev Calculates payout amounts for all recipients
@@ -504,7 +548,6 @@ contract CUBE is
         returns (uint256[] memory payoutAmounts, uint256 totalAmount)
     {
         uint256 recipientsLength = data.recipients.length;
-        uint16 MAX_BPS = 10_000;
         payoutAmounts = new uint256[](recipientsLength);
         totalAmount = 0;
 
@@ -531,18 +574,18 @@ contract CUBE is
     /// @param data The CubeData struct containing payout details
     function _processNativePayouts(CubeData calldata data) internal {
         uint256 totalReferrals;
+        uint256 recipientsLength = data.recipients.length;
 
-        if (data.recipients.length > 0) {
+        if (recipientsLength > 0) {
             // max basis points is 10k (100%)
-            uint16 maxBps = 10_000;
             uint256 contractBalance = address(this).balance;
-            for (uint256 i = 0; i < data.recipients.length;) {
-                if (data.recipients[i].BPS > maxBps) {
+            for (uint256 i = 0; i < recipientsLength;) {
+                if (data.recipients[i].BPS > MAX_BPS) {
                     revert CUBE__BPSTooHigh();
                 }
 
                 // Calculate the referral amount for each recipient
-                uint256 referralAmount = (data.price * data.recipients[i].BPS) / maxBps;
+                uint256 referralAmount = (data.price * data.recipients[i].BPS) / MAX_BPS;
                 totalReferrals = totalReferrals + referralAmount;
 
                 // Ensure the total payout does not exceed the cube price or contract balance
@@ -571,10 +614,9 @@ contract CUBE is
             }
         }
 
-        (bool success,) = payable(s_treasury).call{value: data.price - totalReferrals}("");
-        if (!success) {
-            revert CUBE__NativePaymentFailed();
-        }
+        uint256 treasuryAmount = data.price - totalReferrals;
+        s_treasuryBalanceNative += treasuryAmount;
+        emit TreasuryBalanceUpdated(s_treasuryBalanceNative, treasuryAmount, true);
     }
 
     /// @notice Recovers the signer's address from the CubeData and its associated signature

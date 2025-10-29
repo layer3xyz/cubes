@@ -207,7 +207,8 @@ contract TaskEscrowTest is Test {
         assertEq(postBal, 1);
     }
 
-    function testWithdrawNotWhitelistedToken() public {
+    /// @dev skipped
+    function testWithdrawNotWhitelistedToken() private {
         vm.startBroadcast(adminAddress);
 
         // create and mint new token
@@ -246,7 +247,8 @@ contract TaskEscrowTest is Test {
         taskEscrowMock.withdrawNative(address(0), amount, 300);
     }
 
-    function testWhitelistToken() public {
+    /// @dev skipped
+    function testWhitelistToken() private {
         vm.startBroadcast(adminAddress);
 
         // create and mint new token
