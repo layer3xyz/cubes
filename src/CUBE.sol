@@ -28,7 +28,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /// @title CUBE
 /// @dev Implementation of an NFT smart contract with EIP712 signatures.
 /// The contract is upgradeable using OpenZeppelin's UUPSUpgradeable pattern.
-/// @custom:oz-upgrades-from CUBE
+/// @custom:oz-upgrades-from CUBE_V4
 contract CUBE is
     Initializable,
     ERC721Upgradeable,
@@ -57,9 +57,8 @@ contract CUBE is
     error CUBE__InvalidAdminAddress();
     error CUBE__NoBalanceToSweep();
 
-
     uint256 public constant MAX_BPS = 1e4;
-    
+
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER");
     bytes32 public constant TREASURY_SWEEPER_ROLE = keccak256("TREASURY_SWEEPER");
@@ -507,33 +506,6 @@ contract CUBE is
         emit TreasuryBalanceUpdated(s_treasuryBalanceL3, treasuryAmount, false);
     }
 
-    function sweepToTreasury() external onlyRole(TREASURY_SWEEPER_ROLE) {
-        if (s_treasury == address(0)) revert CUBE__TreasuryNotSet();
-
-        (uint256 l3Amount, uint256 nativeAmount) = (s_treasuryBalanceL3, s_treasuryBalanceNative);
-        if (l3Amount == 0 && nativeAmount == 0) revert CUBE__NoBalanceToSweep();
-
-        s_treasuryBalanceL3 = s_treasuryBalanceNative = 0;
-
-        if (l3Amount > 0) {
-            (bool successL3, bytes memory returnDataL3) = s_l3Token.call(
-                abi.encodeWithSelector(IERC20.transfer.selector, s_treasury, l3Amount)
-            );
-            if (!successL3 || (returnDataL3.length > 0 && !abi.decode(returnDataL3, (bool)))) {
-                revert CUBE__ERC20TransferFailed();
-            }
-        }
-
-        if (nativeAmount > 0) {
-            (bool successNative,) = payable(s_treasury).call{value: nativeAmount}("");
-            if (!successNative) {
-                revert CUBE__NativePaymentFailed();
-            }
-        }
-
-        emit TreasurySwept(nativeAmount, l3Amount);
-    }
-
     /// @dev Calculates payout amounts for all recipients
     /// @param data The CubeData containing recipient information
     /// @return payoutAmounts Array of amounts to pay each recipient
@@ -782,6 +754,35 @@ contract CUBE is
             revert CUBE__WithdrawFailed();
         }
         emit ContractWithdrawal(withdrawAmount);
+    }
+
+    /// @notice Sweeps the contract's balances to the treasury.
+    /// @dev Can only be called by an account with the treasury sweeper role.
+    function sweepToTreasury() external onlyRole(TREASURY_SWEEPER_ROLE) {
+        if (s_treasury == address(0)) revert CUBE__TreasuryNotSet();
+
+        (uint256 l3Amount, uint256 nativeAmount) = (s_treasuryBalanceL3, s_treasuryBalanceNative);
+        if (l3Amount == 0 && nativeAmount == 0) revert CUBE__NoBalanceToSweep();
+
+        s_treasuryBalanceL3 = s_treasuryBalanceNative = 0;
+
+        if (l3Amount > 0) {
+            (bool successL3, bytes memory returnDataL3) = s_l3Token.call(
+                abi.encodeWithSelector(IERC20.transfer.selector, s_treasury, l3Amount)
+            );
+            if (!successL3 || (returnDataL3.length > 0 && !abi.decode(returnDataL3, (bool)))) {
+                revert CUBE__ERC20TransferFailed();
+            }
+        }
+
+        if (nativeAmount > 0) {
+            (bool successNative,) = payable(s_treasury).call{value: nativeAmount}("");
+            if (!successNative) {
+                revert CUBE__NativePaymentFailed();
+            }
+        }
+
+        emit TreasurySwept(nativeAmount, l3Amount);
     }
 
     /// @notice Initializes a new quest with given parameters
