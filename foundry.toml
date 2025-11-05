@@ -13,6 +13,9 @@ optimizer = true
 optimizer_runs = 10000
 # NOTE: viaIR doesn't work with `forge coverage`
 #viaIR = true
+# NOTE: Below are required for OpenZeppelin Upgrades
+ffi = true
+ast = true
 build_info = true
 extra_output = ["storageLayout"]
 

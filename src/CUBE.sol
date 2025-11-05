@@ -28,7 +28,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 /// @title CUBE
 /// @dev Implementation of an NFT smart contract with EIP712 signatures.
 /// The contract is upgradeable using OpenZeppelin's UUPSUpgradeable pattern.
-/// @custom:oz-upgrades-from CUBE
+/// @custom:oz-upgrades-from CUBE_V4
 contract CUBE is
     Initializable,
     ERC721Upgradeable,
@@ -55,12 +55,13 @@ contract CUBE is
     error CUBE__L3PaymentsDisabled();
     error CUBE__TreasuryNotSet();
     error CUBE__InvalidAdminAddress();
+    error CUBE__NoBalanceToSweep();
 
-    uint256 internal s_nextTokenId;
-    bool public s_isMintingActive;
+    uint256 public constant MAX_BPS = 1e4;
 
     bytes32 public constant SIGNER_ROLE = keccak256("SIGNER");
     bytes32 public constant UPGRADER_ROLE = keccak256("UPGRADER");
+    bytes32 public constant TREASURY_SWEEPER_ROLE = keccak256("TREASURY_SWEEPER");
 
     bytes32 internal constant TX_DATA_HASH =
         keccak256("TransactionData(string txHash,string networkChainId)");
@@ -73,6 +74,12 @@ contract CUBE is
         "CubeData(uint256 questId,uint256 nonce,uint256 price,bool isNative,address toAddress,string walletProvider,string tokenURI,string embedOrigin,TransactionData[] transactions,FeeRecipient[] recipients,RewardData reward)FeeRecipient(address recipient,uint16 BPS,uint8 recipientType)RewardData(address tokenAddress,uint256 chainId,uint256 amount,uint256 tokenId,uint8 tokenType,uint256 rakeBps,address factoryAddress,address rewardRecipientAddress)TransactionData(string txHash,string networkChainId)"
     );
 
+    bytes4 internal constant TRANSFER_ERC20 =
+        bytes4(keccak256(bytes("transferFrom(address,address,uint256)")));
+
+    uint256 internal s_nextTokenId;
+    bool public s_isMintingActive;
+
     mapping(uint256 => uint256) internal s_questIssueNumbers;
     mapping(uint256 => string) internal s_tokenURIs;
     mapping(uint256 nonce => bool isConsumed) internal s_nonces;
@@ -81,8 +88,8 @@ contract CUBE is
     address public s_treasury;
     address public s_l3Token;
     bool public s_l3PaymentsEnabled;
-    bytes4 private constant TRANSFER_ERC20 =
-        bytes4(keccak256(bytes("transferFrom(address,address,uint256)")));
+    uint256 public s_treasuryBalanceL3;
+    uint256 public s_treasuryBalanceNative;
 
     enum QuestType {
         QUEST,
@@ -168,7 +175,9 @@ contract CUBE is
     /// @param amount The amount of the payout
     /// @param isNative If the payout was made in native currency
     /// @param recipientType The type of recipient (LAYER3, PUBLISHER, CREATOR, REFERRER)
-    event FeePayout(address indexed recipient, uint256 amount, bool isNative, FeeRecipientType recipientType);
+    event FeePayout(
+        address indexed recipient, uint256 amount, bool isNative, FeeRecipientType recipientType
+    );
 
     /// @notice Emitted when the minting switch is turned on/off
     /// @param isActive The boolean showing if the minting is active or not
@@ -193,6 +202,17 @@ contract CUBE is
     /// @notice Emitted when L3 payments are enabled or disabled
     /// @param enabled Boolean indicating whether L3 payments are enabled
     event L3PaymentsEnabled(bool enabled);
+
+    /// @notice Emitted when the internal treasury balance is updated
+    /// @param balance The balance of the treasury
+    /// @param amount The amount transferred to the treasury
+    /// @param isNative If the balance is in native currency or with L3
+    event TreasuryBalanceUpdated(uint256 balance, uint256 amount, bool isNative);
+
+    /// @notice Emitted when the cube mint fees are swept to the treasury
+    /// @param nativeAmount The amount swept to the treasury with native currency
+    /// @param l3Amount The amount swept to the treasury with L3
+    event TreasurySwept(uint256 nativeAmount, uint256 l3Amount);
 
     /// @dev Represents the data needed for minting a CUBE.
     /// @param questId The ID of the quest associated with the CUBE
@@ -266,7 +286,7 @@ contract CUBE is
 
     /// @notice Returns the version of the CUBE smart contract
     function cubeVersion() external pure returns (string memory) {
-        return "4";
+        return "4.1";
     }
 
     /// @notice Initializes the CUBE contract with necessary parameters
@@ -345,7 +365,7 @@ contract CUBE is
             if (!s_l3PaymentsEnabled) {
                 revert CUBE__L3PaymentsDisabled();
             }
-            
+
             // Check if L3 token is set
             if (s_l3Token == address(0)) {
                 revert CUBE__L3TokenNotSet();
@@ -367,7 +387,8 @@ contract CUBE is
         _validateSignature(data, signature);
 
         // Iterate over all the transactions in the mint request and emit events
-        for (uint256 i = 0; i < data.transactions.length;) {
+        uint256 transactionsLength = data.transactions.length;
+        for (uint256 i = 0; i < transactionsLength;) {
             emit CubeTransaction(
                 tokenId, data.transactions[i].txHash, data.transactions[i].networkChainId
             );
@@ -458,9 +479,8 @@ contract CUBE is
             revert CUBE__ERC20TransferFailed();
         }
 
+        // process payouts to fee recipients
         uint256 recipientsLength = data.recipients.length;
-
-        // process payouts to recipients
         for (uint256 i = 0; i < recipientsLength;) {
             address recipient = data.recipients[i].recipient;
             uint256 amount = payoutAmounts[i];
@@ -482,14 +502,8 @@ contract CUBE is
 
         // Transfer remaining amount to treasury
         uint256 treasuryAmount = data.price - totalAmount;
-        if (treasuryAmount > 0) {
-            (success, returnData) = s_l3Token.call(
-                abi.encodeWithSelector(IERC20.transfer.selector, s_treasury, treasuryAmount)
-            );
-            if (!success || (returnData.length > 0 && !abi.decode(returnData, (bool)))) {
-                revert CUBE__ERC20TransferFailed();
-            }
-        }
+        s_treasuryBalanceL3 += treasuryAmount;
+        emit TreasuryBalanceUpdated(s_treasuryBalanceL3, treasuryAmount, false);
     }
 
     /// @dev Calculates payout amounts for all recipients
@@ -502,7 +516,6 @@ contract CUBE is
         returns (uint256[] memory payoutAmounts, uint256 totalAmount)
     {
         uint256 recipientsLength = data.recipients.length;
-        uint16 MAX_BPS = 10_000;
         payoutAmounts = new uint256[](recipientsLength);
         totalAmount = 0;
 
@@ -529,18 +542,18 @@ contract CUBE is
     /// @param data The CubeData struct containing payout details
     function _processNativePayouts(CubeData calldata data) internal {
         uint256 totalReferrals;
+        uint256 recipientsLength = data.recipients.length;
 
-        if (data.recipients.length > 0) {
+        if (recipientsLength > 0) {
             // max basis points is 10k (100%)
-            uint16 maxBps = 10_000;
             uint256 contractBalance = address(this).balance;
-            for (uint256 i = 0; i < data.recipients.length;) {
-                if (data.recipients[i].BPS > maxBps) {
+            for (uint256 i = 0; i < recipientsLength;) {
+                if (data.recipients[i].BPS > MAX_BPS) {
                     revert CUBE__BPSTooHigh();
                 }
 
                 // Calculate the referral amount for each recipient
-                uint256 referralAmount = (data.price * data.recipients[i].BPS) / maxBps;
+                uint256 referralAmount = (data.price * data.recipients[i].BPS) / MAX_BPS;
                 totalReferrals = totalReferrals + referralAmount;
 
                 // Ensure the total payout does not exceed the cube price or contract balance
@@ -559,7 +572,9 @@ contract CUBE is
                         revert CUBE__TransferFailed();
                     }
 
-                    emit FeePayout(recipient, referralAmount, data.isNative, data.recipients[i].recipientType);
+                    emit FeePayout(
+                        recipient, referralAmount, data.isNative, data.recipients[i].recipientType
+                    );
                 }
                 unchecked {
                     ++i;
@@ -567,10 +582,9 @@ contract CUBE is
             }
         }
 
-        (bool success,) = payable(s_treasury).call{value: data.price - totalReferrals}("");
-        if (!success) {
-            revert CUBE__NativePaymentFailed();
-        }
+        uint256 treasuryAmount = data.price - totalReferrals;
+        s_treasuryBalanceNative += treasuryAmount;
+        emit TreasuryBalanceUpdated(s_treasuryBalanceNative, treasuryAmount, true);
     }
 
     /// @notice Recovers the signer's address from the CubeData and its associated signature
@@ -722,6 +736,7 @@ contract CUBE is
         s_l3Token = _l3;
         emit UpdatedL3Address(_l3);
     }
+
     /// @notice Enables or disables L3 payments
     /// @dev Can only be called by an account with the default admin role.
     /// @param _l3PaymentsEnabled Boolean indicating whether L3 payments should be enabled
@@ -739,6 +754,35 @@ contract CUBE is
             revert CUBE__WithdrawFailed();
         }
         emit ContractWithdrawal(withdrawAmount);
+    }
+
+    /// @notice Sweeps the contract's balances to the treasury.
+    /// @dev Can only be called by an account with the treasury sweeper role.
+    function sweepToTreasury() external onlyRole(TREASURY_SWEEPER_ROLE) {
+        if (s_treasury == address(0)) revert CUBE__TreasuryNotSet();
+
+        (uint256 l3Amount, uint256 nativeAmount) = (s_treasuryBalanceL3, s_treasuryBalanceNative);
+        if (l3Amount == 0 && nativeAmount == 0) revert CUBE__NoBalanceToSweep();
+
+        s_treasuryBalanceL3 = s_treasuryBalanceNative = 0;
+
+        if (l3Amount > 0) {
+            (bool successL3, bytes memory returnDataL3) = s_l3Token.call(
+                abi.encodeWithSelector(IERC20.transfer.selector, s_treasury, l3Amount)
+            );
+            if (!successL3 || (returnDataL3.length > 0 && !abi.decode(returnDataL3, (bool)))) {
+                revert CUBE__ERC20TransferFailed();
+            }
+        }
+
+        if (nativeAmount > 0) {
+            (bool successNative,) = payable(s_treasury).call{value: nativeAmount}("");
+            if (!successNative) {
+                revert CUBE__NativePaymentFailed();
+            }
+        }
+
+        emit TreasurySwept(nativeAmount, l3Amount);
     }
 
     /// @notice Initializes a new quest with given parameters

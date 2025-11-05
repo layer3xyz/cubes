@@ -201,6 +201,7 @@ contract EscrowTest is Test {
         assertEq(postBal, 1);
     }
 
+    // TODO[test]: FIXME
     function testWithdrawNotWhitelistedToken() public {
         vm.startBroadcast(adminAddress);
 
@@ -240,6 +241,7 @@ contract EscrowTest is Test {
         escrowMock.withdrawNative(address(0), amount, 300);
     }
 
+    // TODO[test]: FIXME
     function testWhitelistToken() public {
         vm.startBroadcast(adminAddress);
 
