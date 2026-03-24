@@ -185,7 +185,7 @@ contract TaskEscrow is EIP712, ITokenType, Escrow {
             }
         }
 
-        (bool rewardSuccess,) = payable(to).call{value: amount - rake, gas: GAS_CAP}("");
+        (bool rewardSuccess,) = payable(to).call{value: amount - rake}("");
         if (!rewardSuccess) {
             revert Escrow__NativePayoutError();
         }

@@ -51,7 +51,6 @@ contract Escrow is IEscrow, ERC721Holder, ERC1155Holder, Ownable2Step {
     address public immutable i_treasury;
 
     uint16 constant MAX_BPS = 10_000;
-    uint16 constant GAS_CAP = 35_000;
 
     mapping(address => bool) public s_whitelistedTokens;
 
@@ -228,7 +227,7 @@ contract Escrow is IEscrow, ERC721Holder, ERC1155Holder, Ownable2Step {
             }
         }
 
-        (bool rewardSuccess,) = payable(to).call{value: amount - rake, gas: GAS_CAP}("");
+        (bool rewardSuccess,) = payable(to).call{value: amount - rake}("");
         if (!rewardSuccess) {
             revert Escrow__NativePayoutError();
         }
