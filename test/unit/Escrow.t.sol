@@ -441,4 +441,88 @@ contract EscrowTest is Test {
         (bool success,) = payable(escrowAddr).call{value: 10 ether}("");
         assert(success);
     }
+
+    ///////////////////////////////////////////////////////////////////////
+    ////////////// SMART CONTRACT WALLET (GAS-HEAVY RECEIVE) //////////////
+    ///////////////////////////////////////////////////////////////////////
+
+    /// @dev Verifies that native withdrawal succeeds for a smart contract
+    ///      wallet whose receive() consumes >35,000 gas (previously DoS'd
+    ///      by the GAS_CAP constant).
+    function test_WithdrawNativeToContractWallet() public {
+        GasHeavyReceiver receiver = new GasHeavyReceiver();
+        uint256 amount = 5 ether;
+        uint256 rakeBps = 0;
+
+        // fund escrow
+        hoax(adminAddress, amount);
+        (bool depositOk,) = escrowAddr.call{value: amount}("");
+        require(depositOk, "deposit failed");
+
+        uint256 preBalReceiver = address(receiver).balance;
+
+        vm.prank(adminAddress);
+        escrowMock.withdrawNative(address(receiver), amount, rakeBps);
+
+        assertEq(address(receiver).balance, preBalReceiver + amount);
+    }
+
+    /// @dev Same scenario but with a non-zero rake — both treasury and the
+    ///      contract wallet must receive the correct amounts.
+    function test_WithdrawNativeToContractWalletWithRake() public {
+        GasHeavyReceiver receiver = new GasHeavyReceiver();
+        uint256 amount = 10 ether;
+        uint256 rakeBps = 500; // 5%
+
+        // fund escrow
+        hoax(adminAddress, amount);
+        (bool depositOk,) = escrowAddr.call{value: amount}("");
+        require(depositOk, "deposit failed");
+
+        uint256 preBalReceiver = address(receiver).balance;
+        uint256 preBalTreasury = treasury.balance;
+
+        vm.prank(adminAddress);
+        escrowMock.withdrawNative(address(receiver), amount, rakeBps);
+
+        uint256 rakeFee = amount * rakeBps / MAX_BPS;
+        assertEq(address(receiver).balance, preBalReceiver + amount - rakeFee);
+        assertEq(treasury.balance, preBalTreasury + rakeFee);
+    }
+
+    /// @dev Boundary: rakeBps == MAX_BPS (100%). The entire amount goes to
+    ///      treasury; the contract wallet receives 0 (but the call itself
+    ///      must not revert).
+    function test_WithdrawNativeToContractWalletFullRake() public {
+        GasHeavyReceiver receiver = new GasHeavyReceiver();
+        uint256 amount = 1 ether;
+        uint256 rakeBps = 10_000; // 100%
+
+        hoax(adminAddress, amount);
+        (bool depositOk,) = escrowAddr.call{value: amount}("");
+        require(depositOk, "deposit failed");
+
+        uint256 preBalTreasury = treasury.balance;
+
+        vm.prank(adminAddress);
+        escrowMock.withdrawNative(address(receiver), amount, rakeBps);
+
+        // entire amount is rake
+        assertEq(treasury.balance, preBalTreasury + amount);
+        assertEq(address(receiver).balance, 0);
+    }
+}
+
+/// @dev Mock smart-contract wallet with a gas-heavy receive().
+///      The storage-write loop burns well over 35,000 gas, reproducing the
+///      DoS vector described in the issue.
+contract GasHeavyReceiver {
+    uint256 public dummy;
+
+    receive() external payable {
+        // ~20,000 gas per SSTORE (cold) × 10 iterations ≈ 200k+ gas
+        for (uint256 i = 0; i < 10; i++) {
+            dummy = i;
+        }
+    }
 }
